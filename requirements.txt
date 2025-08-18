@@ -1,0 +1,4 @@
+Flask==2.0.2
+Flask-MySQLdb==1.0.1
+python-dotenv==0.19.1
+Werkzeug==2.0.2
