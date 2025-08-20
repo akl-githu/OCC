@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS documents (
     doc_type VARCHAR(255),
     doc_name VARCHAR(255),
     version VARCHAR(50),
-    path VARCHAR(255)
+    path VARCHAR(255),
+    comments TEXT
 );
 
 -- Insert initial admin and viewer users (PASSWORDS ARE NOT HASHED!)

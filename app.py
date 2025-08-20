@@ -2,9 +2,10 @@ import os
 import datetime
 import MySQLdb.cursors
 import MySQLdb
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, g, send_from_directory
 from dotenv import load_dotenv
 from functools import wraps
+from werkzeug.utils import secure_filename
 
 # Load environment variables from .env file
 load_dotenv()
@@ -13,6 +14,15 @@ load_dotenv()
 app = Flask(__name__)
 # IMPORTANT: Change this to a random, secure key for production
 app.secret_key = os.getenv('SECRET_KEY', 'your_super_secret_key')
+
+# Define a folder to store the uploaded documents
+# The path is relative to the directory where app.py is run
+UPLOAD_FOLDER = 'uploaded_documents'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Create the upload folder if it doesn't exist
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 # Database connection function
 def get_db():
@@ -245,22 +255,48 @@ def manage_users():
         
     return jsonify({'status': 'error', 'message': 'Invalid action'})
 
+# Updated API endpoint to handle file uploads
 @app.route('/api/documents', methods=['POST'])
 @login_required
 def manage_documents():
     db = get_db()
     cursor = db.cursor()
-    data = request.json
-    action = data.get('action')
+
+    # CRITICAL FIX: Try to get JSON data first, as the delete function sends a JSON payload.
+    data = request.get_json(silent=True)
+    if data:
+        action = data.get('action')
+        doc_id = data.get('id')
+    else:
+        # If no JSON, fall back to form data for add/update actions.
+        action = request.form.get('action')
+        doc_id = request.form.get('id')
     
+    # Retrieve the other form fields, as they will be present for add/update actions
+    platform_name = request.form.get('platform_name')
+    doc_type = request.form.get('doc_type')
+    doc_name = request.form.get('doc_name')
+    version = request.form.get('version')
+    doc_file = request.files.get('doc_file')
+    comments = request.form.get('comments')  # New: Retrieve the comments field
+
+    # Initialize path variable
+    path = request.form.get('path')
+
     if action == 'add':
-        platform_name = data.get('platform_name')
-        doc_type = data.get('doc_type')
-        doc_name = data.get('doc_name')
-        version = data.get('version')
-        path = data.get('path')
-        
-        cursor.execute('INSERT INTO documents (platform_name, doc_type, doc_name, version, path) VALUES (%s, %s, %s, %s, %s)', (platform_name, doc_type, doc_name, version, path))
+        if doc_file:
+            # Secure the filename to prevent directory traversal attacks
+            filename = secure_filename(doc_file.filename)
+            # Create the full path to save the file
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            doc_file.save(file_path)
+            # Set the path to be saved in the database
+            path = file_path
+        else:
+            return jsonify({'status': 'error', 'message': 'No file uploaded for a new document.'})
+
+        # New: Include comments in the SQL INSERT statement
+        cursor.execute('INSERT INTO documents (platform_name, doc_type, doc_name, version, path, comments) VALUES (%s, %s, %s, %s, %s, %s)', (platform_name, doc_type, doc_name, version, path, comments))
         db.commit()
         
         # Log the action
@@ -268,27 +304,50 @@ def manage_documents():
         return jsonify({'status': 'success', 'message': 'Document added successfully'})
     
     elif action == 'update':
-        id = data.get('id')
-        platform_name = data.get('platform_name')
-        doc_type = data.get('doc_type')
-        doc_name = data.get('doc_name')
-        version = data.get('version')
-        path = data.get('path')
-
-        cursor.execute('UPDATE documents SET platform_name=%s, doc_type=%s, doc_name=%s, version=%s, path=%s WHERE id=%s', (platform_name, doc_type, doc_name, version, path, id))
+        if doc_file:
+            # Secure the filename
+            filename = secure_filename(doc_file.filename)
+            # Save the new file, overwriting the old one if the name is the same
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            doc_file.save(file_path)
+            # Update the path
+            path = file_path
+        
+        # Use the existing path if no new file was uploaded
+        if not path and not doc_file:
+            # Fetch the old path from the database to avoid overwriting it with a blank value
+            cursor.execute('SELECT path FROM documents WHERE id = %s', (doc_id,))
+            old_path = cursor.fetchone()
+            if old_path:
+                path = old_path[0]
+            else:
+                return jsonify({'status': 'error', 'message': 'Document not found for update.'})
+        
+        # New: Include comments in the SQL UPDATE statement
+        cursor.execute('UPDATE documents SET platform_name=%s, doc_type=%s, doc_name=%s, version=%s, path=%s, comments=%s WHERE id=%s', (platform_name, doc_type, doc_name, version, path, comments, doc_id))
         db.commit()
         
         # Log the action
-        log_event_action(session.get('username'), f'Updated document with ID: {id}')
+        log_event_action(session.get('username'), f'Updated document with ID: {doc_id}')
         return jsonify({'status': 'success', 'message': 'Document updated successfully'})
 
     elif action == 'delete':
-        id = data.get('id')
-        cursor.execute('DELETE FROM documents WHERE id=%s', (id,))
+        # First, retrieve the path to the file to be deleted
+        cursor.execute('SELECT path FROM documents WHERE id = %s', (doc_id,))
+        doc_path = cursor.fetchone()
+
+        if doc_path:
+            file_to_delete = doc_path[0]
+            # Check if the file exists on the filesystem and delete it
+            if os.path.exists(file_to_delete):
+                os.remove(file_to_delete)
+            
+        # Then, delete the record from the database
+        cursor.execute('DELETE FROM documents WHERE id=%s', (doc_id,))
         db.commit()
         
         # Log the action
-        log_event_action(session.get('username'), f'Deleted document with ID: {id}')
+        log_event_action(session.get('username'), f'Deleted document with ID: {doc_id}')
         return jsonify({'status': 'success', 'message': 'Document deleted successfully'})
         
     return jsonify({'status': 'error', 'message': 'Invalid action'})
@@ -301,6 +360,18 @@ def get_documents_by_platform(platform_name):
     cursor.execute('SELECT * FROM documents WHERE platform_name = %s', (platform_name,))
     documents = cursor.fetchall()
     return jsonify(documents)
+
+# This is the new route you need to add to your app.py
+@app.route('/uploads/<filename>')
+@login_required
+def uploaded_file(filename):
+    """
+    Serves a specific file from the secure upload folder.
+    The filename is a part of the URL.
+    """
+    # Use send_from_directory to securely serve the file
+    # This prevents directory traversal attacks
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # Main entry point for the Flask app
 if __name__ == '__main__':

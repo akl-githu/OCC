@@ -14,9 +14,13 @@ services:
     depends_on:
       - db
     volumes:
+      - .:/app
       - ./app.py:/app/app.py
       - ./templates:/app/templates
       - ./requirements.txt:/app/requirements.txt
+      - persistent_data:/app/uploaded_documents
+
+
 
   db:
     image: mysql:8.0
@@ -32,3 +36,8 @@ services:
 
 volumes:
   db_data: {}
+  persistent_data: {}
+
+  
+
+
