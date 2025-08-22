@@ -158,9 +158,9 @@
                         View KPI
                     </a>
                     {% if role == 'Admin' %}
-                    <button onclick="handleManageClick('{{ platform.manage_type }}', '{{ platform.manage_url }}')" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors duration-200">
+                    <a href="{{ platform.manage_url }}" target="_blank" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors duration-200">
                         Manage Platform
-                    </button>
+                    </a>
                     {% endif %}
                 </div>
             </div>
@@ -168,7 +168,7 @@
         </div>
     </main>
 
-    <!-- Custom Modal/Message Box -->
+    <!-- Custom Modal/Message Box (No longer needed, but left for context if other functionality uses it) -->
     <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden flex items-center justify-center">
         <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
@@ -222,22 +222,6 @@
                 sidebarOverlay.classList.remove('active');
             }
         });
-
-        // The updated function to handle the manage platform click
-        function handleManageClick(type, url) {
-            let title = '';
-            let message = '';
-            if (type === 'ssh') {
-                title = 'Opening SSH Client';
-                message = `Opening SSH client for ${url}. This functionality requires a client-side application or protocol handler. For a real app, this would initiate a connection.`;
-                window.open(url, '_blank');
-            } else if (type === 'rdp') {
-                title = 'Opening RDP Client';
-                message = `Opening RDP client for ${url}. This functionality requires a client-side application or protocol handler. For a real app, this would initiate a connection.`;
-                window.open(url, '_blank');
-            }
-            showMessage(title, message);
-        }
     </script>
 </body>
 </html>
