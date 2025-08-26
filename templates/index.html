@@ -66,24 +66,19 @@
                     </a>
                 </li>
                 {% if role == 'Admin' %}
-                <!-- START: Modified User Management link -->
                 <li>
                     <a href="{{ url_for('user_management') }}" class="flex items-center p-3 rounded-lg text-gray-700 hover:bg-gray-200 transition duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                         User Management
                     </a>
                 </li>
-                <!-- END: Modified User Management link -->
                 {% endif %}
-                <!-- START: Modified Platform Tracker link -->
-                <!-- Removed submenu and made it a direct link -->
                 <li>
                     <a href="{{ url_for('platform_tracker') }}" class="flex items-center p-3 rounded-lg text-gray-700 hover:bg-gray-200 transition duration-200">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3.5-3.5a4 4 0 1 0-6.07-6.07l-.5.5"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3.5 3.5a4 4 0 1 0 6.07 6.07l.5-.5"></path></svg>
                         Platform Tracker
                     </a>
                 </li>
-                <!-- END: Modified Platform Tracker link -->
                 {% if role == 'Admin' %}
                 <li>
                     <a href="{{ url_for('events_logs') }}" class="flex items-center p-3 rounded-lg text-gray-700 hover:bg-gray-200 transition duration-200">
@@ -154,9 +149,10 @@
                     Status: {{ platform.status }}
                 </span>
                 <div class="mt-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
-                    <a href="{{ platform.grafana_url }}" target="_blank" class="w-full bg-blue-500 text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200">
+                    <!-- Changed from an <a> tag to a <button> with an onclick event -->
+                    <button onclick="viewGrafana('{{ platform.grafana_url }}')" class="w-full bg-blue-500 text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200">
                         View KPI
-                    </a>
+                    </button>
                     {% if role == 'Admin' %}
                     <a href="{{ platform.manage_url }}" target="_blank" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors duration-200">
                         Manage Platform
@@ -168,7 +164,22 @@
         </div>
     </main>
 
-    <!-- Custom Modal/Message Box (No longer needed, but left for context if other functionality uses it) -->
+    <!-- New Modal for Grafana Iframe -->
+    <div id="grafana-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gray-800 bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl h-full max-h-screen flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center p-4 border-b border-gray-200">
+                <h3 class="text-xl font-semibold text-gray-900">Platform KPIs</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold">&times;</button>
+            </div>
+            <!-- Iframe Container with overflow-y-auto for scrolling -->
+            <div class="flex-grow p-4 overflow-y-auto">
+                <iframe id="grafana-iframe" class="w-full h-full rounded-md border border-gray-300" src="" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal/Message Box (Retained for existing functionality) -->
     <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden flex items-center justify-center">
         <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
@@ -197,7 +208,7 @@
             sidebarOverlay.classList.toggle('active');
         }
 
-        // Functions to handle the custom modal/message box
+        // Functions to handle the custom message modal
         function showMessage(title, message) {
             modalTitle.textContent = title;
             modalMessage.textContent = message;
@@ -210,7 +221,7 @@
             messageModal.classList.add('hidden');
         }
 
-        // Event listeners
+        // Event listeners for existing functionality
         menuToggle.addEventListener('click', toggleMenu);
         sidebarOverlay.addEventListener('click', toggleMenu);
         modalClose.addEventListener('click', hideMessage);
@@ -222,6 +233,26 @@
                 sidebarOverlay.classList.remove('active');
             }
         });
+
+        // New JavaScript functions for the Grafana iframe modal
+        function viewGrafana(url) {
+            const iframe = document.getElementById('grafana-iframe');
+            const modal = document.getElementById('grafana-modal');
+            iframe.src = url;
+            modal.classList.remove('hidden');
+            // Adding a class to the body to prevent background scrolling
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeModal() {
+            const iframe = document.getElementById('grafana-iframe');
+            const modal = document.getElementById('grafana-modal');
+            modal.classList.add('hidden');
+            // Clearing the iframe src prevents it from loading content in the background
+            iframe.src = '';
+            // Re-enabling body scrolling
+            document.body.classList.remove('overflow-hidden');
+        }
     </script>
 </body>
 </html>
