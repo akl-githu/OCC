@@ -188,20 +188,55 @@ def events_logs():
 
     return render_template('event_logs.html', logs=logs)
 
+# Route for the platform tracker page
 @app.route('/platform_tracker')
 @login_required
 def platform_tracker():
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
+    
     cursor.execute('SELECT * FROM documents')
     documents = cursor.fetchall()
     
     # Get unique platform names for the dropdown
-    cursor.execute('SELECT DISTINCT name FROM platforms')
+    cursor.execute('SELECT name FROM platforms')
     platforms = cursor.fetchall()
-    platform_names = [p['name'] for p in platforms]
     
-    return render_template('platform_tracker.html', documents=documents, platform_names=platform_names)
+    return render_template('platform_tracker.html', documents=documents, platforms=platforms)
+
+# API endpoint to add a new platform
+@app.route('/api/add_platform', methods=['POST'])
+@login_required
+@admin_required
+def add_platform():
+    db = get_db()
+    cursor = db.cursor()
+    data = request.json
+    
+    platform_name = data.get('platform_name')
+    if not platform_name:
+        return jsonify({'status': 'error', 'message': 'Platform name is required'}), 400
+    
+    try:
+        # Insert into platforms table without 'progress_stage' as it has a default value
+        cursor.execute(
+            'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url) VALUES (%s, %s, %s, %s, %s, %s)',
+            (platform_name, 'Online', 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name, '', '', '')
+        )
+        
+        # Insert into platform_progress table without 'progress_stage' and 'stage_date'
+        cursor.execute(
+            'INSERT INTO platform_progress (platform_name, comments) VALUES (%s, %s)',
+            (platform_name, 'Platform added')
+        )
+        
+        db.commit()
+        log_event_action(session.get('username'), f'Added new platform: {platform_name}')
+        return jsonify({'status': 'success', 'message': 'Platform added successfully'})
+    except MySQLdb.Error as e:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 # API endpoints for CRUD operations
 @app.route('/api/users', methods=['POST'])
@@ -278,8 +313,8 @@ def manage_documents():
     doc_name = request.form.get('doc_name')
     version = request.form.get('version')
     doc_file = request.files.get('doc_file')
-    comments = request.form.get('comments')  # New: Retrieve the comments field
-
+    comments = request.form.get('comments')
+    
     # Initialize path variable
     path = request.form.get('path')
 
@@ -360,6 +395,64 @@ def get_documents_by_platform(platform_name):
     cursor.execute('SELECT * FROM documents WHERE platform_name = %s', (platform_name,))
     documents = cursor.fetchall()
     return jsonify(documents)
+
+# New API endpoint to get progress data for a specific platform
+@app.route('/api/platform_progress/<string:platform_name>')
+@login_required
+def get_platform_progress(platform_name):
+    db = get_db()
+    cursor = db.cursor(MySQLdb.cursors.DictCursor)
+    # Get the latest entry for each stage for the selected platform
+    cursor.execute("""
+        SELECT 
+            t1.progress_stage,
+            t1.stage_date,
+            t1.comments
+        FROM platform_progress t1
+        JOIN (
+            SELECT
+                progress_stage,
+                MAX(stage_date) AS max_date
+            FROM platform_progress
+            WHERE platform_name = %s
+            GROUP BY progress_stage
+        ) t2
+        ON t1.progress_stage = t2.progress_stage AND t1.stage_date = t2.max_date
+        WHERE t1.platform_name = %s
+        ORDER BY t1.stage_date ASC
+    """, (platform_name, platform_name))
+    progress = cursor.fetchall()
+    if progress:
+        return jsonify(progress)
+    return jsonify({'status': 'error', 'message': 'No progress found for this platform'}), 404
+
+# New API endpoint to add/update platform progress
+@app.route('/api/platform_progress', methods=['POST'])
+@login_required
+@admin_required
+def manage_platform_progress():
+    db = get_db()
+    cursor = db.cursor()
+    data = request.json
+    
+    platform_name = data.get('platform_name')
+    stage = data.get('progress_stage')
+    date = data.get('stage_date')
+    comments = data.get('comments')
+
+    if not all([platform_name, stage, date]):
+        return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+    # Insert new progress entry
+    cursor.execute(
+        'INSERT INTO platform_progress (platform_name, progress_stage, stage_date, comments) VALUES (%s, %s, %s, %s)',
+        (platform_name, stage, date, comments)
+    )
+    db.commit()
+    
+    log_event_action(session.get('username'), f'Updated progress for {platform_name} to stage: {stage}')
+    
+    return jsonify({'status': 'success', 'message': 'Platform progress updated successfully'})
 
 # This is the new route you need to add to your app.py
 @app.route('/uploads/<filename>')

@@ -11,7 +11,6 @@
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
-    <!-- Header -->
     <header class="bg-white p-4 shadow-md flex items-center justify-between">
         <div class="flex items-center space-x-4">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -31,11 +30,118 @@
         </div>
     </header>
 
-    <!-- Main Content Area -->
     <main class="p-6 md:p-10">
         <h1 class="text-3xl font-bold mb-6">Platform Tracker</h1>
+        
+        {% if role == 'Admin' %}
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Adding Platform</h2>
+            <form id="add-platform-form" class="flex flex-col md:flex-row items-end space-y-4 md:space-y-0 md:space-x-4">
+                <div class="flex-1 w-full">
+                    <label for="platform-name-input" class="block text-sm font-medium text-gray-700">Platform Name</label>
+                    <input type="text" id="platform-name-input" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+                </div>
+                <button type="submit" class="w-full md:w-auto py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">Add</button>
+            </form>
+            <div id="platform-feedback-message" class="mt-4 hidden"></div>
+        </div>
+        {% endif %}
 
-        <!-- Filter and Add Form -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Platform Progress</h2>
+                <div class="flex items-center space-x-2">
+                    <label for="platform-progress-menu" class="text-sm font-medium text-gray-700">Select Platform:</label>
+                    <select id="platform-progress-menu" class="rounded-md border-gray-300 shadow-sm">
+                        {% for platform in platforms %}
+                            <option value="{{ platform.name }}">{{ platform.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div id="progress-bar-container" class="flex flex-col md:flex-row items-center justify-between space-x-2 text-sm text-center">
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-crc" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-colors duration-300 bg-gray-300 text-gray-500">
+                        CRC
+                    </div>
+                    <div id="date-crc" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
+                
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-rfp" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
+                        RFP
+                    </div>
+                    <div id="date-rfp" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
+
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-rfq" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
+                        RFQ
+                    </div>
+                    <div id="date-rfq" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
+
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-poc" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
+                        POC
+                    </div>
+                    <div id="date-poc" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
+
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-atp" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
+                        ATP
+                    </div>
+                    <div id="date-atp" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
+
+                <div class="flex flex-col items-center flex-1">
+                    <div id="stage-rfs" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
+                        RFS
+                    </div>
+                    <div id="date-rfs" class="stage-date mt-1 text-xs text-gray-500"></div>
+                </div>
+            </div>
+            
+            {% if role == 'Admin' %}
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <h3 class="text-lg font-semibold mb-4">Update Progress</h3>
+                <form id="progress-form" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label for="progress-stage" class="block text-sm font-medium text-gray-700">Select Stage</label>
+                            <select id="progress-stage" name="progress_stage" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                                <option value="CRC">CRC</option>
+                                <option value="RFP">RFP</option>
+                                <option value="RFQ">RFQ</option>
+                                <option value="POC">POC</option>
+                                <option value="ATP">ATP</option>
+                                <option value="RFS">RFS</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="stage-date" class="block text-sm font-medium text-gray-700">Stage Date</label>
+                            <input type="date" id="stage-date" name="stage_date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
+                        </div>
+                        <div class="md:col-span-1">
+                            <label for="progress-comments" class="block text-sm font-medium text-gray-700">Comments</label>
+                            <textarea id="progress-comments" name="comments" rows="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">Update Progress</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
         <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
             <div class="flex flex-col md:flex-row justify-between items-center mb-4">
                 <h2 class="text-xl font-semibold mb-4 md:mb-0">Document Management</h2>
@@ -45,9 +151,9 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                         <label for="platform-name" class="block text-sm font-medium text-gray-700">Platform</label>
-                        <select id="platform-name" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
-                            {% for platform in platform_names %}
-                                <option value="{{ platform }}">{{ platform }}</option>
+                        <select id="doc-platform-name" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+                            {% for platform in platforms %}
+                                <option value="{{ platform.name }}">{{ platform.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -71,7 +177,6 @@
                         <label for="path" class="block text-sm font-medium text-gray-700">Path</label>
                         <input type="text" id="path" name="path" class="mt-1 block w-full bg-gray-200 rounded-md border-gray-300 shadow-sm" placeholder="Auto-filled on save" readonly>
                     </div>
-                    <!-- New Comments Textarea -->
                     <div class="md:col-span-3">
                         <label for="comments" class="block text-sm font-medium text-gray-700">Comments</label>
                         <textarea id="comments" name="comments" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Add any notes or comments here"></textarea>
@@ -83,26 +188,24 @@
                 </div>
             </form>
         </div>
-
-        <!-- Documents Table -->
+        
         <div class="bg-white rounded-xl shadow-lg p-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-semibold">Documents</h2>
-                <!-- New Filter Dropdown -->
                 <div class="flex items-center space-x-2">
                     <label for="platform-filter" class="text-sm font-medium text-gray-700">Filter by Platform:</label>
                     <select id="platform-filter" class="rounded-md border-gray-300 shadow-sm" onchange="filterTable()">
                         <option value="All">All</option>
-                        {% for platform in platform_names %}
-                            <option value="{{ platform }}">{{ platform }}</option>
+                        {% for platform in platforms %}
+                            <option value="{{ platform.name }}">{{ platform.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
             <div class="overflow-x-auto">
-                <div class="max-h-96 overflow-y-auto"> <!-- Added container for vertical scroll -->
+                <div class="max-h-96 overflow-y-auto">
                     <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50 sticky top-0 z-10"> <!-- Made header sticky -->
+                        <thead class="bg-gray-50 sticky top-0 z-10">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Doc Type</th>
@@ -138,9 +241,10 @@
     </main>
 
     <script>
+        // Doc Management Form Logic (Slight change to platform name input)
         const form = document.getElementById('doc-form');
         const docIdInput = document.getElementById('doc-id');
-        const platformNameInput = document.getElementById('platform-name');
+        const platformNameInput = document.getElementById('doc-platform-name');
         const docTypeInput = document.getElementById('doc-type');
         const docNameInput = document.getElementById('doc-name');
         const versionInput = document.getElementById('version');
@@ -244,9 +348,146 @@
             }
         }
         
-        // Initial call to apply filter when the page loads, in case a default is set
+        // --- New Progress Bar Logic ---
+        const progressMenu = document.getElementById('platform-progress-menu');
+        const progressForm = document.getElementById('progress-form');
+        const progressStages = ['CRC', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
+        const stageDates = {
+            CRC: document.getElementById('date-crc'),
+            RFP: document.getElementById('date-rfp'),
+            RFQ: document.getElementById('date-rfq'),
+            POC: document.getElementById('date-poc'),
+            ATP: document.getElementById('date-atp'),
+            RFS: document.getElementById('date-rfs')
+        };
+        const addPlatformForm = document.getElementById('add-platform-form');
+        const addPlatformFeedback = document.getElementById('platform-feedback-message');
+
+        function renderProgressBar(progressData) {
+            // Reset all circles and lines
+            progressStages.forEach(stage => {
+                const stageCircle = document.getElementById(`stage-${stage.toLowerCase()}`);
+                const stageLine = stageCircle.parentElement.nextElementSibling;
+                stageCircle.classList.remove('bg-blue-600', 'text-white');
+                stageCircle.classList.add('bg-gray-300', 'text-gray-500');
+                if (stageLine) {
+                    stageLine.classList.remove('bg-blue-600');
+                    stageLine.classList.add('bg-gray-300');
+                }
+                stageDates[stage].textContent = '';
+            });
+
+            // Populate progress data and update the bar
+            progressData.forEach(item => {
+                const currentStage = item.progress_stage;
+                const currentDate = item.stage_date;
+                const currentIndex = progressStages.indexOf(currentStage);
+
+                // Update circle and line up to the current stage
+                for (let i = 0; i <= currentIndex; i++) {
+                    const stage = progressStages[i];
+                    const stageCircle = document.getElementById(`stage-${stage.toLowerCase()}`);
+                    const stageLine = stageCircle.parentElement.nextElementSibling;
+                    
+                    stageCircle.classList.remove('bg-gray-300', 'text-gray-500');
+                    stageCircle.classList.add('bg-blue-600', 'text-white');
+                    if (stageLine) {
+                        stageLine.classList.remove('bg-gray-300');
+                        stageLine.classList.add('bg-blue-600');
+                    }
+                }
+                
+                // Set the date for the current stage
+                if (stageDates[currentStage]) {
+                    stageDates[currentStage].textContent = currentDate;
+                }
+            });
+        }
+
+        async function fetchProgressAndRender(platformName) {
+            const response = await fetch(`/api/platform_progress/${platformName}`);
+            const progressData = await response.json();
+            if (response.ok) {
+                renderProgressBar(progressData);
+            } else {
+                renderProgressBar([]); // Render empty progress bar if no data found
+                console.error('Failed to fetch platform progress:', progressData.message);
+            }
+        }
+
+        progressMenu.addEventListener('change', (e) => {
+            const selectedPlatform = e.target.value;
+            fetchProgressAndRender(selectedPlatform);
+        });
+
+        if (progressForm) {
+            progressForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = {
+                    platform_name: progressMenu.value,
+                    progress_stage: formData.get('progress_stage'),
+                    stage_date: formData.get('stage_date'),
+                    comments: formData.get('comments')
+                };
+
+                const response = await fetch('/api/platform_progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                if (result.status === 'success') {
+                    alert('Progress updated successfully!');
+                    fetchProgressAndRender(progressMenu.value);
+                    progressForm.reset();
+                } else {
+                    alert('Failed to update progress: ' + result.message);
+                }
+            });
+        }
+
+        addPlatformForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const platformName = document.getElementById('platform-name-input').value;
+            addPlatformFeedback.classList.add('hidden');
+            
+            const response = await fetch('/api/add_platform', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform_name: platformName })
+            });
+
+            const result = await response.json();
+            addPlatformFeedback.classList.remove('hidden');
+            if (result.status === 'success') {
+                addPlatformFeedback.classList.remove('bg-red-100', 'text-red-700');
+                addPlatformFeedback.classList.add('bg-green-100', 'text-green-700');
+                addPlatformFeedback.textContent = 'Platform added successfully! Please refresh the page to see the changes.';
+                // Re-fetch platforms to update dropdowns
+                const platformsResponse = await fetch('/platform_tracker');
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(await platformsResponse.text(), 'text/html');
+                const newProgressMenu = doc.getElementById('platform-progress-menu').innerHTML;
+                const newDocPlatformName = doc.getElementById('doc-platform-name').innerHTML;
+                document.getElementById('platform-progress-menu').innerHTML = newProgressMenu;
+                document.getElementById('doc-platform-name').innerHTML = newDocPlatformName;
+            } else {
+                addPlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
+                addPlatformFeedback.classList.add('bg-red-100', 'text-red-700');
+                addPlatformFeedback.textContent = 'Error: ' + result.message;
+            }
+        });
+
+
+        // Initial call to apply filter and fetch progress when the page loads
         document.addEventListener('DOMContentLoaded', () => {
             filterTable();
+            const firstPlatform = progressMenu.value;
+            if (firstPlatform) {
+                fetchProgressAndRender(firstPlatform);
+            }
         });
     </script>
 </body>

@@ -35,17 +35,14 @@
 </head>
 <body class="bg-gray-100 text-gray-800 flex flex-col md:flex-row min-h-screen">
 
-    <!-- Mobile Menu Toggle -->
     <button id="menu-toggle" class="md:hidden fixed top-4 left-4 z-20 p-2 rounded-lg bg-white shadow-md">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
     </button>
 
-    <!-- Sidebar Overlay for mobile -->
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-    <!-- Sidebar -->
     <aside id="sidebar" class="sidebar bg-white w-64 p-6 shadow-xl md:sticky md:top-0 h-screen overflow-y-auto">
         <div class="flex items-center space-x-3 mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -104,9 +101,7 @@
         </nav>
     </aside>
 
-    <!-- Main Content Area -->
     <main class="flex-1 p-6 md:p-10 overflow-y-auto">
-        <!-- Top Header -->
         <header class="flex items-center justify-between bg-white p-4 rounded-xl shadow mb-6 md:hidden">
             <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -126,7 +121,6 @@
             </div>
         </header>
 
-        <!-- Main Dashboard Header (Desktop) -->
         <div class="hidden md:flex items-center justify-between mb-8">
             <h1 class="text-3xl font-bold text-gray-800">Platform Dashboard</h1>
             <div class="flex items-center space-x-4">
@@ -138,7 +132,6 @@
             </div>
         </div>
 
-        <!-- Dashboard Content -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {% for platform in platforms %}
             <div class="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col items-center p-6 text-center transform hover:scale-105 transition duration-300 ease-in-out">
@@ -149,7 +142,6 @@
                     Status: {{ platform.status }}
                 </span>
                 <div class="mt-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
-                    <!-- Changed from an <a> tag to a <button> with an onclick event -->
                     <button onclick="viewGrafana('{{ platform.grafana_url }}')" class="w-full bg-blue-500 text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200">
                         View KPI
                     </button>
@@ -164,22 +156,18 @@
         </div>
     </main>
 
-    <!-- New Modal for Grafana Iframe -->
     <div id="grafana-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gray-800 bg-opacity-75 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl h-full max-h-screen flex flex-col">
-            <!-- Modal Header -->
             <div class="flex justify-between items-center p-4 border-b border-gray-200">
                 <h3 class="text-xl font-semibold text-gray-900">Platform KPIs</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold">&times;</button>
             </div>
-            <!-- Iframe Container with overflow-y-auto for scrolling -->
             <div class="flex-grow p-4 overflow-y-auto">
                 <iframe id="grafana-iframe" class="w-full h-full rounded-md border border-gray-300" src="" frameborder="0"></iframe>
             </div>
         </div>
     </div>
 
-    <!-- Custom Modal/Message Box (Retained for existing functionality) -->
     <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden flex items-center justify-center">
         <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
