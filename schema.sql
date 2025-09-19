@@ -52,7 +52,6 @@ CREATE TABLE platform_progress (
     stage_date DATE NOT NULL,
     comments TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    --FOREIGN KEY (platform_name) REFERENCES platforms(name) ON DELETE CASCADE
 );
 
 -- Insert initial user data
