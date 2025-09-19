@@ -55,11 +55,11 @@ pipeline {
     }
 
     // Post-build actions
-    post {
+    //post {
         // Always clean up the workspace to free up disk space on the Jenkins VM.
-        always {
-            cleanWs()
-            echo 'Workspace cleaned.'
-        }
-    }
+        //always {
+            //cleanWs()
+            //echo 'Workspace cleaned.'
+        //}
+    //}
 }
