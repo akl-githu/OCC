@@ -1,4 +1,7 @@
+// This is a declarative Jenkins Pipeline script for a Docker-based application.
 
+// Set the agent to "any" to run the pipeline on the local Jenkins node
+// which is the Azure VM itself.
 pipeline {
     agent any
 
@@ -18,7 +21,7 @@ pipeline {
                 // The 'checkout scm' step automatically checks out the code
                 // from the configured Git repository in the job settings.
                 echo 'Checking out source code from Git...'
-                git branch: 'master', url: "${GIT_REPO_URL}"
+                git branch: 'main', url: "${GIT_REPO_URL}"
             }
         }
 
@@ -28,9 +31,6 @@ pipeline {
                 script {
                     echo 'Building Docker image...'
                     // Build the Docker image using the Dockerfile
-                    // The image name is derived from the DOCKER_IMAGE variable
-                    // which is also used in the docker-compose.yml file.
-                    // This command uses the Dockerfile in the current directory.
                     sh 'docker build -t your-app-image:latest .'
                 }
             }
@@ -42,12 +42,8 @@ pipeline {
                 script {
                     echo 'Deploying application using docker-compose...'
                     // Stop and remove any existing containers to ensure a clean start.
-                    // The --timeout flag prevents the script from hanging.
                     sh 'docker-compose down --timeout 30 || true'
-
                     // Use docker-compose up to build and start the containers in detached mode (-d).
-                    // This will automatically create and start the `web` and `db` services as defined in
-                    // your docker-compose.yml, pulling the latest built image.
                     sh 'docker-compose up -d --build --force-recreate'
                 }
             }
@@ -55,11 +51,12 @@ pipeline {
     }
 
     // Post-build actions
-    //post {
+    post {
         // Always clean up the workspace to free up disk space on the Jenkins VM.
-        //always {
-            //cleanWs()
-            //echo 'Workspace cleaned.'
-        //}
-    //}
+        // This command ensures that the next build starts with a fresh workspace.
+        always {
+            cleanWs()
+            echo 'Workspace cleaned.'
+        }
+    }
 }
