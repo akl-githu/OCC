@@ -18,7 +18,7 @@ pipeline {
                 // The 'checkout scm' step automatically checks out the code
                 // from the configured Git repository in the job settings.
                 echo 'Checking out source code from Git...'
-                git branch: 'main', url: "${GIT_REPO_URL}"
+                git branch: 'master', url: "${GIT_REPO_URL}"
             }
         }
 
