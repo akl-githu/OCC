@@ -198,7 +198,7 @@ def platform_tracker():
     cursor.execute('SELECT * FROM documents')
     documents = cursor.fetchall()
     
-    # Get unique platform names for the dropdown
+    # Get unique platform names for the dropdowns
     cursor.execute('SELECT name FROM platforms')
     platforms = cursor.fetchall()
     
@@ -214,25 +214,125 @@ def add_platform():
     data = request.json
     
     platform_name = data.get('platform_name')
+    grafana_url = data.get('grafana_url', '') # Get new field
+
     if not platform_name:
         return jsonify({'status': 'error', 'message': 'Platform name is required'}), 400
     
+    # FIX: Change 'status' from None to an empty string to satisfy NOT NULL constraint
+    status = '' # Default to empty string instead of NULL
+    manage_url = "https://techpam.etisalat.corp.ae/SecretServer/Login.aspxReturnUrl=%2fSecretServer%2fdefault.aspx"
+    image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name # Retain old default
+    manage_type = '' # Retain old default
+    
     try:
-        # Insert into platforms table without 'progress_stage' as it has a default value
+        # Insert into platforms table with updated fields
         cursor.execute(
             'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url) VALUES (%s, %s, %s, %s, %s, %s)',
-            (platform_name, 'Online', 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name, '', '', '')
+            (platform_name, status, image_url, grafana_url, manage_type, manage_url)
         )
         
         # Insert into platform_progress table without 'progress_stage' and 'stage_date'
         cursor.execute(
             'INSERT INTO platform_progress (platform_name, comments) VALUES (%s, %s)',
-            (platform_name, 'Platform added')
+            (platform_name, 'Platform added - Initial entry')
         )
         
         db.commit()
         log_event_action(session.get('username'), f'Added new platform: {platform_name}')
         return jsonify({'status': 'success', 'message': 'Platform added successfully'})
+    except MySQLdb.Error as e:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# NEW API endpoint to update a platform's name and/or Grafana URL
+@app.route('/api/update_platform', methods=['POST'])
+@login_required
+@admin_required
+def update_platform():
+    db = get_db()
+    cursor = db.cursor()
+    data = request.json
+    
+    old_platform_name = data.get('old_platform_name')
+    new_platform_name = data.get('new_platform_name')
+    grafana_url = data.get('grafana_url', '')
+
+    if not old_platform_name or not new_platform_name:
+        return jsonify({'status': 'error', 'message': 'Old and New Platform names are required for update'}), 400
+    
+    try:
+        # Check if the platform exists
+        cursor.execute('SELECT name FROM platforms WHERE name = %s', (old_platform_name,))
+        if cursor.rowcount == 0:
+            return jsonify({'status': 'error', 'message': f'Platform "{old_platform_name}" not found'}), 404
+
+        # If the name is changing, we need to perform cascading updates
+        if old_platform_name != new_platform_name:
+            # 1. Check if the new name already exists (to prevent conflict)
+            cursor.execute('SELECT name FROM platforms WHERE name = %s', (new_platform_name,))
+            if cursor.rowcount > 0:
+                return jsonify({'status': 'error', 'message': f'Platform name "{new_platform_name}" already exists. Please choose a unique name.'}), 400
+                
+            # 2. Update platform_progress records (cascading update)
+            cursor.execute('UPDATE platform_progress SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
+
+            # 3. Update documents records (cascading update)
+            cursor.execute('UPDATE documents SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
+
+        # 4. Update the platform itself (name and Grafana URL)
+        cursor.execute(
+            'UPDATE platforms SET name = %s, grafana_url = %s WHERE name = %s',
+            (new_platform_name, grafana_url, old_platform_name)
+        )
+        
+        db.commit()
+        
+        log_event_action(session.get('username'), f'Updated platform from "{old_platform_name}" to "{new_platform_name}" (Grafana URL updated)')
+        return jsonify({'status': 'success', 'message': f'Platform "{old_platform_name}" updated to "{new_platform_name}" successfully'})
+    except MySQLdb.Error as e:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# NEW API endpoint to delete a platform and all its related data
+@app.route('/api/delete_platform', methods=['POST'])
+@login_required
+@admin_required
+def delete_platform():
+    db = get_db()
+    cursor = db.cursor()
+    data = request.json
+    
+    platform_name = data.get('platform_name')
+
+    if not platform_name:
+        return jsonify({'status': 'error', 'message': 'Platform name is required for deletion'}), 400
+    
+    try:
+        # 1. Get list of files to delete from the filesystem
+        cursor.execute('SELECT path FROM documents WHERE platform_name = %s', (platform_name,))
+        files_to_delete = cursor.fetchall()
+        
+        # 2. Delete all related documents from the database
+        cursor.execute('DELETE FROM documents WHERE platform_name = %s', (platform_name,))
+
+        # 3. Delete all related progress entries
+        cursor.execute('DELETE FROM platform_progress WHERE platform_name = %s', (platform_name,))
+        
+        # 4. Delete the platform itself
+        cursor.execute('DELETE FROM platforms WHERE name = %s', (platform_name,))
+        
+        db.commit()
+        
+        # 5. Delete files from the filesystem
+        for (file_path,) in files_to_delete:
+            # Only attempt to delete files that exist and are within the UPLOAD_FOLDER
+            if file_path.startswith(app.config['UPLOAD_FOLDER']) and os.path.exists(file_path):
+                os.remove(file_path)
+        
+        log_event_action(session.get('username'), f'Deleted platform: {platform_name} and all related data')
+        return jsonify({'status': 'success', 'message': f'Platform "{platform_name}" and all related data deleted successfully'})
     except MySQLdb.Error as e:
         db.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -330,7 +430,7 @@ def manage_documents():
         else:
             return jsonify({'status': 'error', 'message': 'No file uploaded for a new document.'})
 
-        # New: Include comments in the SQL INSERT statement
+        # Include comments in the SQL INSERT statement
         cursor.execute('INSERT INTO documents (platform_name, doc_type, doc_name, version, path, comments) VALUES (%s, %s, %s, %s, %s, %s)', (platform_name, doc_type, doc_name, version, path, comments))
         db.commit()
         
@@ -358,7 +458,7 @@ def manage_documents():
             else:
                 return jsonify({'status': 'error', 'message': 'Document not found for update.'})
         
-        # New: Include comments in the SQL UPDATE statement
+        # Include comments in the SQL UPDATE statement
         cursor.execute('UPDATE documents SET platform_name=%s, doc_type=%s, doc_name=%s, version=%s, path=%s, comments=%s WHERE id=%s', (platform_name, doc_type, doc_name, version, path, comments, doc_id))
         db.commit()
         
@@ -374,7 +474,7 @@ def manage_documents():
         if doc_path:
             file_to_delete = doc_path[0]
             # Check if the file exists on the filesystem and delete it
-            if os.path.exists(file_to_delete):
+            if file_to_delete.startswith(app.config['UPLOAD_FOLDER']) and os.path.exists(file_to_delete):
                 os.remove(file_to_delete)
             
         # Then, delete the record from the database
@@ -396,7 +496,7 @@ def get_documents_by_platform(platform_name):
     documents = cursor.fetchall()
     return jsonify(documents)
 
-# New API endpoint to get progress data for a specific platform
+# API endpoint to get progress data for a specific platform
 @app.route('/api/platform_progress/<string:platform_name>')
 @login_required
 def get_platform_progress(platform_name):
@@ -426,7 +526,7 @@ def get_platform_progress(platform_name):
         return jsonify(progress)
     return jsonify({'status': 'error', 'message': 'No progress found for this platform'}), 404
 
-# New API endpoint to add/update platform progress
+# API endpoint to add/update platform progress
 @app.route('/api/platform_progress', methods=['POST'])
 @login_required
 @admin_required
@@ -454,7 +554,7 @@ def manage_platform_progress():
     
     return jsonify({'status': 'success', 'message': 'Platform progress updated successfully'})
 
-# This is the new route you need to add to your app.py
+# Route to serve uploaded files
 @app.route('/uploads/<filename>')
 @login_required
 def uploaded_file(filename):

@@ -21,8 +21,7 @@ CREATE TABLE IF NOT EXISTS platforms (
     image_url VARCHAR(255),
     grafana_url VARCHAR(255),
     manage_type VARCHAR(50),
-    manage_url VARCHAR(255),
-    progress_stage VARCHAR(50) NOT NULL DEFAULT 'CRC'
+    manage_url VARCHAR(255),   --ALTER TABLE platforms DROP COLUMN progress_stage;
 );
 
 -- Table for events and actions logs
@@ -66,4 +65,5 @@ INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage
 ('CIOT', 'Online', 'https://placehold.co/100x100/C4D1FF/000000?text=CIOT', 'https://grafana.example.com/d/ciot', 'ssh', 'ssh://user@ciot.example.com', 'ATP'),
 ('AI', 'Online', 'https://placehold.co/100x100/FFD6A5/000000?text=AI', 'https://grafana.example.com/d/ai', 'ssh', 'ssh://user@ai.example.com', 'POC'),
 ('SAQR', 'Online', 'https://placehold.co/100x100/A2E3B9/000000?text=SAQR', 'https://grafana.example.com/d/saqr', 'ssh', 'ssh://user@saqr.example.com', 'RFS');
+
 

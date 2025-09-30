@@ -41,9 +41,58 @@
                     <label for="platform-name-input" class="block text-sm font-medium text-gray-700">Platform Name</label>
                     <input type="text" id="platform-name-input" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
                 </div>
+                <div class="flex-1 w-full">
+                    <label for="grafana-url-input" class="block text-sm font-medium text-gray-700">Grafana URL</label>
+                    <input type="url" id="grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
+                </div>
                 <button type="submit" class="w-full md:w-auto py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">Add</button>
             </form>
-            <div id="platform-feedback-message" class="mt-4 hidden"></div>
+            <div id="platform-feedback-message" class="mt-4 hidden p-3 rounded-md"></div>
+        </div>
+
+        <div class="bg-yellow-50 border border-yellow-200 rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-yellow-800">Platform Update</h2>
+            <form id="update-platform-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="w-full">
+                        <label for="platform-update-menu" class="block text-sm font-medium text-yellow-700">Select Platform to Update</label>
+                        <select id="platform-update-menu" class="mt-1 block w-full rounded-md border-yellow-300 shadow-sm focus:border-yellow-500 focus:ring focus:ring-yellow-200 focus:ring-opacity-50" required>
+                            <option value="" disabled selected>Select a platform...</option>
+                            {% for platform in platforms %}
+                                <option value="{{ platform.name }}">{{ platform.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="w-full">
+                        <label for="new-platform-name-input" class="block text-sm font-medium text-gray-700">New Platform Name</label>
+                        <input type="text" id="new-platform-name-input" name="new_platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Required">
+                    </div>
+                    <div class="w-full">
+                        <label for="new-grafana-url-input" class="block text-sm font-medium text-gray-700">New Grafana URL</label>
+                        <input type="url" id="new-grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">Update Platform</button>
+                </div>
+            </form>
+            <div id="update-platform-feedback-message" class="mt-4 hidden p-3 rounded-md"></div>
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-red-800">Platform Deletion</h2>
+            <form id="delete-platform-form" class="flex flex-col md:flex-row items-end space-y-4 md:space-y-0 md:space-x-4">
+                <div class="flex-1 w-full">
+                    <label for="platform-delete-menu" class="block text-sm font-medium text-red-700">Select Platform to Delete</label>
+                    <select id="platform-delete-menu" class="mt-1 block w-full rounded-md border-red-300 shadow-sm focus:border-red-500 focus:ring focus:ring-red-200 focus:ring-opacity-50" required>
+                        <option value="" disabled selected>Select a platform...</option>
+                        {% for platform in platforms %}
+                            <option value="{{ platform.name }}">{{ platform.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="w-full md:w-auto py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Delete Platform</button>
+            </form>
+            <div id="delete-platform-feedback-message" class="mt-4 hidden p-3 rounded-md"></div>
         </div>
         {% endif %}
 
@@ -241,7 +290,7 @@
     </main>
 
     <script>
-        // Doc Management Form Logic (Slight change to platform name input)
+        // Doc Management Form Logic 
         const form = document.getElementById('doc-form');
         const docIdInput = document.getElementById('doc-id');
         const platformNameInput = document.getElementById('doc-platform-name');
@@ -252,6 +301,35 @@
         const docFileInput = document.getElementById('doc-file');
         const commentsInput = document.getElementById('comments');
         const tableBody = document.getElementById('doc-table-body');
+        
+        // Addition/Deletion related constants
+        const deletePlatformForm = document.getElementById('delete-platform-form');
+        const platformDeleteMenu = document.getElementById('platform-delete-menu');
+        const deletePlatformFeedback = document.getElementById('delete-platform-feedback-message');
+        const addPlatformForm = document.getElementById('add-platform-form');
+        const addPlatformFeedback = document.getElementById('platform-feedback-message');
+
+        // NEW Update related constants
+        const updatePlatformForm = document.getElementById('update-platform-form');
+        const platformUpdateMenu = document.getElementById('platform-update-menu');
+        const newPlatformNameInput = document.getElementById('new-platform-name-input');
+        const newGrafanaUrlInput = document.getElementById('new-grafana-url-input');
+        const updatePlatformFeedback = document.getElementById('update-platform-feedback-message');
+
+        
+        // Progress bar related constants
+        const progressMenu = document.getElementById('platform-progress-menu');
+        const progressForm = document.getElementById('progress-form');
+        const progressStages = ['CRC', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
+        const stageDates = {
+            CRC: document.getElementById('date-crc'),
+            RFP: document.getElementById('date-rfp'),
+            RFQ: document.getElementById('date-rfq'),
+            POC: document.getElementById('date-poc'),
+            ATP: document.getElementById('date-atp'),
+            RFS: document.getElementById('date-rfs')
+        };
+        
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -271,6 +349,7 @@
                 formData.append('path', pathInput.value);
             }
             
+            // Assume 'add' since there is no update/edit functionality implemented yet.
             const action = 'add';
             formData.append('action', action);
 
@@ -297,6 +376,7 @@
         });
 
         async function fetchDocs() {
+            // Re-fetch the entire HTML and parse the new table body
             const response = await fetch('/platform_tracker');
             const parser = new DOMParser();
             const doc = parser.parseFromString(await response.text(), 'text/html');
@@ -329,7 +409,7 @@
             if (feedbackMessage) feedbackMessage.remove();
         }
 
-        // New JavaScript function to filter the table
+        // JavaScript function to filter the table
         function filterTable() {
             const filterValue = document.getElementById('platform-filter').value;
             const rows = document.getElementById('doc-table-body').getElementsByTagName('tr');
@@ -348,21 +428,7 @@
             }
         }
         
-        // --- New Progress Bar Logic ---
-        const progressMenu = document.getElementById('platform-progress-menu');
-        const progressForm = document.getElementById('progress-form');
-        const progressStages = ['CRC', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
-        const stageDates = {
-            CRC: document.getElementById('date-crc'),
-            RFP: document.getElementById('date-rfp'),
-            RFQ: document.getElementById('date-rfq'),
-            POC: document.getElementById('date-poc'),
-            ATP: document.getElementById('date-atp'),
-            RFS: document.getElementById('date-rfs')
-        };
-        const addPlatformForm = document.getElementById('add-platform-form');
-        const addPlatformFeedback = document.getElementById('platform-feedback-message');
-
+        // --- Progress Bar Logic ---
         function renderProgressBar(progressData) {
             // Reset all circles and lines
             progressStages.forEach(stage => {
@@ -380,7 +446,10 @@
             // Populate progress data and update the bar
             progressData.forEach(item => {
                 const currentStage = item.progress_stage;
-                const currentDate = item.stage_date;
+                // Format date for better display
+                const dateObj = new Date(item.stage_date);
+                const currentDate = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                
                 const currentIndex = progressStages.indexOf(currentStage);
 
                 // Update circle and line up to the current stage
@@ -400,6 +469,8 @@
                 // Set the date for the current stage
                 if (stageDates[currentStage]) {
                     stageDates[currentStage].textContent = currentDate;
+                    // Add comments as a tooltip or title attribute
+                    stageDates[currentStage].title = item.comments || 'No comments';
                 }
             });
         }
@@ -411,7 +482,7 @@
                 renderProgressBar(progressData);
             } else {
                 renderProgressBar([]); // Render empty progress bar if no data found
-                console.error('Failed to fetch platform progress:', progressData.message);
+                console.error('No progress found for this platform');
             }
         }
 
@@ -447,16 +518,23 @@
                 }
             });
         }
-
+        
+        // Platform Addition Logic
         addPlatformForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const platformName = document.getElementById('platform-name-input').value;
+            // Get the new Grafana URL input
+            const grafanaUrl = document.getElementById('grafana-url-input').value;
+
             addPlatformFeedback.classList.add('hidden');
             
             const response = await fetch('/api/add_platform', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ platform_name: platformName })
+                body: JSON.stringify({ 
+                    platform_name: platformName,
+                    grafana_url: grafanaUrl // Send the new field
+                })
             });
 
             const result = await response.json();
@@ -465,20 +543,153 @@
                 addPlatformFeedback.classList.remove('bg-red-100', 'text-red-700');
                 addPlatformFeedback.classList.add('bg-green-100', 'text-green-700');
                 addPlatformFeedback.textContent = 'Platform added successfully! Please refresh the page to see the changes.';
-                // Re-fetch platforms to update dropdowns
-                const platformsResponse = await fetch('/platform_tracker');
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(await platformsResponse.text(), 'text/html');
-                const newProgressMenu = doc.getElementById('platform-progress-menu').innerHTML;
-                const newDocPlatformName = doc.getElementById('doc-platform-name').innerHTML;
-                document.getElementById('platform-progress-menu').innerHTML = newProgressMenu;
-                document.getElementById('doc-platform-name').innerHTML = newDocPlatformName;
+                
+                // Re-fetch platform list and update all platform dropdowns
+                await updatePlatformDropdowns();
+                addPlatformForm.reset();
             } else {
                 addPlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
                 addPlatformFeedback.classList.add('bg-red-100', 'text-red-700');
                 addPlatformFeedback.textContent = 'Error: ' + result.message;
             }
         });
+
+        // NEW: Platform Update Logic
+        if (updatePlatformForm) {
+            updatePlatformForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const oldPlatformName = platformUpdateMenu.value;
+                const newPlatformName = newPlatformNameInput.value.trim();
+                const grafanaUrl = newGrafanaUrlInput.value.trim();
+
+                if (!oldPlatformName || !newPlatformName) {
+                    updatePlatformFeedback.classList.remove('hidden');
+                    updatePlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
+                    updatePlatformFeedback.classList.add('bg-red-100', 'text-red-700');
+                    updatePlatformFeedback.textContent = 'Please select a platform and provide a new platform name.';
+                    return;
+                }
+
+                updatePlatformFeedback.classList.add('hidden');
+
+                const data = {
+                    old_platform_name: oldPlatformName,
+                    new_platform_name: newPlatformName,
+                    grafana_url: grafanaUrl
+                };
+
+                const response = await fetch('/api/update_platform', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                updatePlatformFeedback.classList.remove('hidden');
+
+                if (result.status === 'success') {
+                    updatePlatformFeedback.classList.remove('bg-red-100', 'text-red-700');
+                    updatePlatformFeedback.classList.add('bg-green-100', 'text-green-700');
+                    updatePlatformFeedback.textContent = result.message + ' Note: You may need to refresh the main dashboard (index.html) to see the card name updated.';
+
+                    // Update all platform dropdowns and re-fetch documents/progress if the name changed
+                    await updatePlatformDropdowns();
+                    
+                    // Clear the input fields
+                    updatePlatformForm.reset();
+
+                    if (oldPlatformName !== newPlatformName) {
+                        // Trigger re-fetch for documents and progress for the new name
+                        // This handles the case where the selected platform's name was just changed
+                        document.getElementById('platform-progress-menu').value = newPlatformName;
+                        document.getElementById('platform-filter').value = newPlatformName; // Set filter to the new name
+                        document.getElementById('doc-platform-name').value = newPlatformName;
+                        fetchProgressAndRender(newPlatformName);
+                        fetchDocs();
+                    } else {
+                        // If only URL changed, just reset the form and re-render progress (no name change to worry about)
+                        fetchProgressAndRender(oldPlatformName);
+                    }
+                } else {
+                    updatePlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
+                    updatePlatformFeedback.classList.add('bg-red-100', 'text-red-700');
+                    updatePlatformFeedback.textContent = 'Error: ' + result.message;
+                }
+            });
+        }
+
+
+        // Platform Deletion Logic
+        deletePlatformForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const platformName = platformDeleteMenu.value;
+
+            if (!platformName) {
+                deletePlatformFeedback.classList.remove('hidden');
+                deletePlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
+                deletePlatformFeedback.classList.add('bg-red-100', 'text-red-700');
+                deletePlatformFeedback.textContent = 'Please select a platform to delete.';
+                return;
+            }
+
+            if (!window.confirm(`WARNING: Are you sure you want to permanently delete the platform "${platformName}"? This action cannot be undone and will delete the platform card from the dashboard, ALL its progress data, ALL associated documents from the table, AND the physical uploaded files from the server.`)) {
+                return;
+            }
+
+            deletePlatformFeedback.classList.add('hidden');
+
+            const response = await fetch('/api/delete_platform', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform_name: platformName })
+            });
+
+            const result = await response.json();
+            deletePlatformFeedback.classList.remove('hidden');
+
+            if (result.status === 'success') {
+                deletePlatformFeedback.classList.remove('bg-red-100', 'text-red-700');
+                deletePlatformFeedback.classList.add('bg-green-100', 'text-green-700');
+                deletePlatformFeedback.textContent = result.message + ' Note: You may need to refresh the main dashboard (index.html) to see the card removed.';
+
+                // Update all platform dropdowns
+                await updatePlatformDropdowns();
+                // Clear the selection
+                platformDeleteMenu.value = '';
+                // Also update the document table
+                await fetchDocs();
+            } else {
+                deletePlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
+                deletePlatformFeedback.classList.add('bg-red-100', 'text-red-700');
+                deletePlatformFeedback.textContent = 'Error: ' + result.message;
+            }
+        });
+
+        // Helper function to update all platform dropdowns by re-fetching the HTML
+        async function updatePlatformDropdowns() {
+            const platformsResponse = await fetch('/platform_tracker');
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(await platformsResponse.text(), 'text/html');
+            
+            // Re-fetch the content of the dropdowns from the newly parsed HTML
+            const newProgressMenuHTML = doc.getElementById('platform-progress-menu').innerHTML;
+            const newDocPlatformNameHTML = doc.getElementById('doc-platform-name').innerHTML;
+            const newPlatformFilterHTML = doc.getElementById('platform-filter').innerHTML;
+            const newPlatformDeleteMenuHTML = doc.getElementById('platform-delete-menu').innerHTML;
+            // NEW: Fetch the update menu HTML
+            const newPlatformUpdateMenuHTML = doc.getElementById('platform-update-menu').innerHTML;
+
+
+            // Update the DOM elements
+            document.getElementById('platform-progress-menu').innerHTML = newProgressMenuHTML;
+            document.getElementById('doc-platform-name').innerHTML = newDocPlatformNameHTML;
+            document.getElementById('platform-filter').innerHTML = newPlatformFilterHTML;
+            document.getElementById('platform-delete-menu').innerHTML = newPlatformDeleteMenuHTML;
+            // NEW: Update the update menu
+            document.getElementById('platform-update-menu').innerHTML = newPlatformUpdateMenuHTML;
+
+        }
 
 
         // Initial call to apply filter and fetch progress when the page loads
