@@ -195,6 +195,19 @@ def platform_tracker():
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
     
+    # Get unique platform names for the dropdowns
+    cursor.execute('SELECT name FROM platforms')
+    platforms = cursor.fetchall()
+    
+    return render_template('platform_tracker.html', platforms=platforms)
+
+# NEW Route for the documents page
+@app.route('/documents')
+@login_required
+def documents():
+    db = get_db()
+    cursor = db.cursor(MySQLdb.cursors.DictCursor)
+    
     cursor.execute('SELECT * FROM documents')
     documents = cursor.fetchall()
     
@@ -202,12 +215,11 @@ def platform_tracker():
     cursor.execute('SELECT name FROM platforms')
     platforms = cursor.fetchall()
     
-    return render_template('platform_tracker.html', documents=documents, platforms=platforms)
+    return render_template('documents.html', documents=documents, platforms=platforms)
 
 # API endpoint to add a new platform
 @app.route('/api/add_platform', methods=['POST'])
 @login_required
-@admin_required
 def add_platform():
     db = get_db()
     cursor = db.cursor()
@@ -248,7 +260,6 @@ def add_platform():
 # NEW API endpoint to update a platform's name and/or Grafana URL
 @app.route('/api/update_platform', methods=['POST'])
 @login_required
-@admin_required
 def update_platform():
     db = get_db()
     cursor = db.cursor()
@@ -298,7 +309,6 @@ def update_platform():
 # NEW API endpoint to delete a platform and all its related data
 @app.route('/api/delete_platform', methods=['POST'])
 @login_required
-@admin_required
 def delete_platform():
     db = get_db()
     cursor = db.cursor()
@@ -391,9 +401,14 @@ def manage_users():
     return jsonify({'status': 'error', 'message': 'Invalid action'})
 
 # Updated API endpoint to handle file uploads
-@app.route('/api/documents', methods=['POST'])
+@app.route('/api/documents', methods=['GET', 'POST'])
 @login_required
 def manage_documents():
+    # FIX: Handle incorrect GET requests by redirecting to the correct page.
+    if request.method == 'GET':
+        return redirect(url_for('documents'))
+
+    # If method is POST, proceed with the API logic.
     db = get_db()
     cursor = db.cursor()
 
@@ -569,3 +584,4 @@ def uploaded_file(filename):
 # Main entry point for the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
