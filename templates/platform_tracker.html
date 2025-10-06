@@ -33,18 +33,22 @@
     <main class="p-6 md:p-10">
         <h1 class="text-3xl font-bold mb-6">Platform Tracker</h1>
         
-        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Adding Platform</h2>
-            <form id="add-platform-form" class="flex flex-col md:flex-row items-end space-y-4 md:space-y-0 md:space-x-4">
-                <div class="flex-1 w-full">
-                    <label for="platform-name-input" class="block text-sm font-medium text-gray-700">Platform Name</label>
-                    <input type="text" id="platform-name-input" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+        <div class="bg-green-50 border border-green-200 rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-green-800">Adding Platform</h2>
+            <form id="add-platform-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div class="w-full">
+                        <label for="platform-name-input" class="block text-sm font-medium text-gray-700">Platform Name</label>
+                        <input type="text" id="platform-name-input" name="platform_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" required>
+                    </div>
+                    <div class="w-full">
+                        <label for="grafana-url-input" class="block text-sm font-medium text-gray-700">Grafana URL</label>
+                        <input type="url" id="grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
+                    </div>
                 </div>
-                <div class="flex-1 w-full">
-                    <label for="grafana-url-input" class="block text-sm font-medium text-gray-700">Grafana URL</label>
-                    <input type="url" id="grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
+                <div class="flex justify-end">
+                    <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Add Platform</button>
                 </div>
-                <button type="submit" class="w-full md:w-auto py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">Add</button>
             </form>
             <div id="platform-feedback-message" class="mt-4 hidden p-3 rounded-md"></div>
         </div>
@@ -105,7 +109,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <a href="{{ url_for('documents') }}" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+                    <a href="{{ url_for('documents') }}" class="text-blue-600 hover:text-blue-800">
                         Manage Documents
                     </a>
                 </div>
@@ -113,10 +117,10 @@
             
             <div id="progress-bar-container" class="flex flex-col md:flex-row items-center justify-between space-x-2 text-sm text-center">
                 <div class="flex flex-col items-center flex-1">
-                    <div id="stage-crc" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-colors duration-300 bg-gray-300 text-gray-500">
-                        CRC
+                    <div id="stage-srs" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-colors duration-300 bg-gray-300 text-gray-500">
+                        SRS
                     </div>
-                    <div id="date-crc" class="stage-date mt-1 text-xs text-gray-500"></div>
+                    <div id="date-srs" class="stage-date mt-1 text-xs text-gray-500"></div>
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
                 
@@ -167,7 +171,7 @@
                         <div>
                             <label for="progress-stage" class="block text-sm font-medium text-gray-700">Select Stage</label>
                             <select id="progress-stage" name="progress_stage" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required>
-                                <option value="CRC">CRC</option>
+                                <option value="SRS">SRS</option>
                                 <option value="RFP">RFP</option>
                                 <option value="RFQ">RFQ</option>
                                 <option value="POC">POC</option>
@@ -211,9 +215,9 @@
         // Progress bar related constants
         const progressMenu = document.getElementById('platform-progress-menu');
         const progressForm = document.getElementById('progress-form');
-        const progressStages = ['CRC', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
+        const progressStages = ['SRS', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
         const stageDates = {
-            CRC: document.getElementById('date-crc'),
+            SRS: document.getElementById('date-srs'),
             RFP: document.getElementById('date-rfp'),
             RFQ: document.getElementById('date-rfq'),
             POC: document.getElementById('date-poc'),

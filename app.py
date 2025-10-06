@@ -544,7 +544,6 @@ def get_platform_progress(platform_name):
 # API endpoint to add/update platform progress
 @app.route('/api/platform_progress', methods=['POST'])
 @login_required
-@admin_required
 def manage_platform_progress():
     db = get_db()
     cursor = db.cursor()
@@ -584,4 +583,3 @@ def uploaded_file(filename):
 # Main entry point for the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-

@@ -162,18 +162,6 @@
         </div>
     </main>
 
-    <div id="grafana-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-gray-800 bg-opacity-75 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl h-full max-h-screen flex flex-col">
-            <div class="flex justify-between items-center p-4 border-b border-gray-200">
-                <h3 class="text-xl font-semibold text-gray-900">Platform KPIs</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold">&times;</button>
-            </div>
-            <div class="flex-grow p-4 overflow-y-auto">
-                <iframe id="grafana-iframe" class="w-full h-full rounded-md border border-gray-300" src="" frameborder="0"></iframe>
-            </div>
-        </div>
-    </div>
-
     <div id="message-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden flex items-center justify-center">
         <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
@@ -228,25 +216,18 @@
             }
         });
 
-        // New JavaScript functions for the Grafana iframe modal
+        // MODIFIED: This function now opens the Grafana URL in a new tab.
         function viewGrafana(url) {
-            const iframe = document.getElementById('grafana-iframe');
-            const modal = document.getElementById('grafana-modal');
-            iframe.src = url;
-            modal.classList.remove('hidden');
-            // Adding a class to the body to prevent background scrolling
-            document.body.classList.add('overflow-hidden');
+            // Check if the URL is not empty or null before trying to open it
+            if (url) {
+                window.open(url, '_blank');
+            } else {
+                // Optionally, show a message if the URL is missing
+                showMessage('URL Missing', 'No KPI dashboard URL is configured for this platform.');
+            }
         }
 
-        function closeModal() {
-            const iframe = document.getElementById('grafana-iframe');
-            const modal = document.getElementById('grafana-modal');
-            modal.classList.add('hidden');
-            // Clearing the iframe src prevents it from loading content in the background
-            iframe.src = '';
-            // Re-enabling body scrolling
-            document.body.classList.remove('overflow-hidden');
-        }
+        // The 'closeModal' function has been removed as it's no longer needed.
     </script>
 </body>
 </html>
