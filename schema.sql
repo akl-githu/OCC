@@ -48,7 +48,7 @@ CREATE TABLE platform_progress (
     id INT AUTO_INCREMENT PRIMARY KEY,
     platform_name VARCHAR(255) NOT NULL,
     progress_stage ENUM('SRS', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS') NOT NULL,
-    stage_date DATE NOT NULL,
+    stage_date DATE,
     comments TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
