@@ -16,6 +16,10 @@
             overflow-y: auto;
             z-index: 50;
         }
+        /* Make the stages clearly clickable */
+        .stage-item {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -60,7 +64,7 @@
             </div>
             
             <div id="progress-bar-container" class="flex flex-col md:flex-row items-center justify-between space-x-2 text-sm text-center">
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="SRS">
                     <div id="stage-srs" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-white transition-colors duration-300 bg-gray-300 text-gray-500">
                         SRS
                     </div>
@@ -68,7 +72,7 @@
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
                 
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="RFP">
                     <div id="stage-rfp" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
                         RFP
                     </div>
@@ -76,7 +80,7 @@
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
 
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="RFQ">
                     <div id="stage-rfq" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
                         RFQ
                     </div>
@@ -84,7 +88,7 @@
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
 
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="POC">
                     <div id="stage-poc" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
                         POC
                     </div>
@@ -92,7 +96,7 @@
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
 
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="ATP">
                     <div id="stage-atp" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
                         ATP
                     </div>
@@ -100,7 +104,7 @@
                 </div>
                 <div class="stage-line flex-1 h-1 bg-gray-300 transition-colors duration-300 hidden md:block"></div>
 
-                <div class="flex flex-col items-center flex-1">
+                <div class="stage-item flex flex-col items-center flex-1" data-stage="RFS">
                     <div id="stage-rfs" class="stage-circle w-10 h-10 rounded-full flex items-center justify-center font-bold text-gray-500 transition-colors duration-300 bg-gray-300">
                         RFS
                     </div>
@@ -153,7 +157,6 @@
                     </div>
                 </div>
                 
-                <!-- FIELDS FOR PROMETHEUS CONFIGURATION -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end pt-4 border-t border-green-200">
                     <div class="w-full">
                         <label for="prometheus-url-input" class="block text-sm font-medium text-gray-700">Prometheus Server URL (Base)</label>
@@ -164,8 +167,6 @@
                         <input type="text" id="health-check-endpoint-input" name="health_check_endpoint" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="e.g., api/v1/status/tsdb">
                     </div>
                 </div>
-                <!-- END PROMETHEUS FIELDS -->
-                
                 <div class="flex justify-end">
                     <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Add Platform</button>
                 </div>
@@ -194,7 +195,6 @@
                         <label for="new-grafana-url-input" class="block text-sm font-medium text-gray-700">New Grafana URL</label>
                         <input type="url" id="new-grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
                     </div>
-                    <!-- FIELDS FOR UPDATE -->
                     <div class="w-full">
                         <label for="new-prometheus-url-input" class="block text-sm font-medium text-gray-700">New Prometheus URL</label>
                         <input type="url" id="new-prometheus-url-input" name="prometheus_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
@@ -268,6 +268,11 @@
         const progressMenu = document.getElementById('platform-progress-menu');
         const progressForm = document.getElementById('progress-form');
         const progressStages = ['SRS', 'RFP', 'RFQ', 'POC', 'ATP', 'RFS'];
+        const progressBarContainer = document.getElementById('progress-bar-container'); // NEW
+        
+        // MAPPING: Store the progress data fetched from the API for easy lookup
+        let currentPlatformProgress = {}; 
+
         const stageDates = {
             SRS: document.getElementById('date-srs'),
             RFP: document.getElementById('date-rfp'),
@@ -286,9 +291,13 @@
 
 
         // Function to show a simple notification modal
-        function showMessage(title, message) {
+        function showMessage(title, message, isHtml = false) { // MODIFIED to accept HTML
             modalTitle.textContent = title;
-            modalMessage.textContent = message;
+            if (isHtml) {
+                modalMessage.innerHTML = message;
+            } else {
+                modalMessage.textContent = message;
+            }
             
             // Clear and set for simple 'OK' button
             modalFooter.innerHTML = '';
@@ -312,6 +321,12 @@
 
         // --- Progress Bar Logic ---
         function renderProgressBar(progressData) {
+            // Store the data in the global mapping for click events
+            currentPlatformProgress = {}; 
+            progressData.forEach(item => {
+                currentPlatformProgress[item.progress_stage] = item;
+            });
+
             // Reset logic remains the same...
             progressStages.forEach(stage => {
                 const stageCircle = document.getElementById(`stage-${stage.toLowerCase()}`);
@@ -323,6 +338,8 @@
                     stageLine.classList.add('bg-gray-300');
                 }
                 stageDates[stage].textContent = '';
+                // Clear the title/tooltip as well
+                stageDates[stage].removeAttribute('title');
             });
 
             // Populate progress data and update the bar
@@ -372,6 +389,36 @@
             const selectedPlatform = e.target.value;
             fetchProgressAndRender(selectedPlatform);
         });
+        
+        // NEW: Event listener for progress bar stage clicks
+        progressBarContainer.addEventListener('click', (e) => {
+            let stageItem = e.target.closest('.stage-item');
+            if (stageItem) {
+                const stage = stageItem.dataset.stage;
+                const progress = currentPlatformProgress[stage];
+                
+                if (progress) {
+                    const dateObj = new Date(progress.stage_date);
+                    const formattedDate = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                    
+                    const title = `Details for Stage: ${progress.progress_stage}`;
+                    const message = `
+                        <p class="mb-2"><strong>Platform:</strong> ${progressMenu.value}</p>
+                        <p class="mb-2"><strong>Date Completed:</strong> ${formattedDate}</p>
+                        <hr class="my-3"/>
+                        <p><strong>Comments:</strong></p>
+                        <p class="text-gray-700">${progress.comments || 'No comments provided for this stage.'}</p>
+                    `;
+                    
+                    showMessage(title, message, true); // Pass true to indicate HTML content
+                } else {
+                    const title = 'Stage Incomplete';
+                    const message = `The platform progress for stage "${stage}" is not yet available or recorded.`;
+                    showMessage(title, message);
+                }
+            }
+        });
+
 
         if (progressForm) {
             progressForm.addEventListener('submit', async (e) => {
