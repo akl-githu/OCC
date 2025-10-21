@@ -321,6 +321,7 @@ def documents():
 # MODIFIED: API endpoint to add a new platform, including Prometheus configuration
 @app.route('/api/add_platform', methods=['POST'])
 @login_required
+@admin_required # Platform CRUD should be admin restricted
 def add_platform():
     db = get_db()
     cursor = db.cursor()
@@ -364,6 +365,7 @@ def add_platform():
 # MODIFIED: API endpoint to update a platform's details, including Prometheus configuration
 @app.route('/api/update_platform', methods=['POST'])
 @login_required
+@admin_required # Platform CRUD should be admin restricted
 def update_platform():
     db = get_db()
     cursor = db.cursor()
@@ -416,6 +418,7 @@ def update_platform():
 # NEW API endpoint to delete a platform and all its related data
 @app.route('/api/delete_platform', methods=['POST'])
 @login_required
+@admin_required # Platform CRUD should be admin restricted
 def delete_platform():
     db = get_db()
     cursor = db.cursor()
@@ -507,7 +510,7 @@ def manage_users():
         
     return jsonify({'status': 'error', 'message': 'Invalid action'})
 
-# Updated API endpoint to handle file uploads
+# MODIFIED: Updated API endpoint to handle file uploads and restrict deletion
 @app.route('/api/documents', methods=['GET', 'POST'])
 @login_required
 def manage_documents():
@@ -589,6 +592,10 @@ def manage_documents():
         return jsonify({'status': 'success', 'message': 'Document updated successfully'})
 
     elif action == 'delete':
+        # NEW: Check for Admin role specifically for deletion
+        if session.get('role') != 'Admin':
+            return jsonify({'status': 'error', 'message': 'Permission denied. Only Admin users can delete documents.'}), 403
+
         # First, retrieve the path to the file to be deleted
         cursor.execute('SELECT path FROM documents WHERE id = %s', (doc_id,))
         doc_path = cursor.fetchone()

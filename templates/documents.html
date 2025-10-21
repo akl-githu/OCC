@@ -123,7 +123,12 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ doc.comments }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <button onclick="deleteDoc('{{ doc.id }}')" class="text-red-600 hover:text-red-900">Delete</button>
+                                    {# Only show delete button for Admin users #}
+                                    {% if role == 'Admin' %}
+                                        <button onclick="deleteDoc('{{ doc.id }}')" class="text-red-600 hover:text-red-900">Delete</button>
+                                    {% else %}
+                                        <span class="text-gray-400">View Only</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -165,8 +170,10 @@
                 formData.append('path', pathInput.value);
             }
             
-            // Assume 'add' since there is no update/edit functionality implemented yet.
-            const action = 'add';
+            // This logic allows for both 'add' and potential 'update' via the API
+            // The form itself does not explicitly track 'update' state, so we default to 'add'
+            // or rely on the form being pre-filled for an 'update' scenario (which is not implemented client-side yet)
+            const action = docIdInput.value ? 'update' : 'add'; 
             formData.append('action', action);
 
             const response = await fetch('/api/documents', {
@@ -175,7 +182,7 @@
             });
 
             const result = await response.json();
-            const feedbackMessage = document.getElementById('feedback-message');
+            let feedbackMessage = document.getElementById('feedback-message');
             if (result.status === 'success') {
                 if (feedbackMessage) feedbackMessage.remove();
                 await fetchDocs();
@@ -185,9 +192,9 @@
                     const messageElement = document.createElement('div');
                     messageElement.id = 'feedback-message';
                     messageElement.className = 'mt-4 p-3 bg-red-100 text-red-700 rounded-md';
-                    messageElement.textContent = result.message;
-                    form.parentElement.insertBefore(messageElement, form.nextSibling);
+                    feedbackMessage = form.parentElement.insertBefore(messageElement, form.nextSibling);
                 }
+                feedbackMessage.textContent = result.message;
             }
         });
 
@@ -203,17 +210,20 @@
         }
 
         async function deleteDoc(id) {
+            // The API now handles permission denial and returns a 403 error for Viewers.
             if (window.confirm('Are you sure you want to delete this document?')) {
                 const response = await fetch('/api/documents', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'delete', id: id })
                 });
+                
                 const result = await response.json();
+                
                 if (result.status === 'success') {
                     await fetchDocs();
                 } else {
-                    alert(result.message);
+                    alert('Deletion failed: ' + result.message);
                 }
             }
         }
