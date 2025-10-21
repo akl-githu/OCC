@@ -286,7 +286,7 @@ def events_logs():
 
     return render_template('event_logs.html', logs=logs)
 
-# Route for the platform tracker page
+# MODIFIED: Route for the platform tracker page to pass the user's role
 @app.route('/platform_tracker')
 @login_required
 def platform_tracker():
@@ -297,7 +297,10 @@ def platform_tracker():
     cursor.execute('SELECT name FROM platforms')
     platforms = cursor.fetchall()
     
-    return render_template('platform_tracker.html', platforms=platforms)
+    # Get the user's role from the session
+    user_role = session.get('role')
+    
+    return render_template('platform_tracker.html', platforms=platforms, user_role=user_role)
 
 # NEW Route for the documents page
 @app.route('/documents')
