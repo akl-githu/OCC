@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS platforms (
     image_url VARCHAR(255),
     grafana_url VARCHAR(255),
     manage_type VARCHAR(50),
-    manage_url VARCHAR(255)
+    manage_url VARCHAR(255),
+        -- NEW COLUMNS FOR PROMETHEUS INTEGRATION
+    prometheus_url VARCHAR(255),
+    health_check_endpoint VARCHAR(255)
 );
 
 -- Table for events and actions logs

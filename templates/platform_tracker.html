@@ -8,6 +8,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
+        /* Add fixed modal style to ensure it works correctly when copied */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            z-index: 50;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -144,6 +152,20 @@
                         <input type="url" id="grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
                     </div>
                 </div>
+                
+                <!-- FIELDS FOR PROMETHEUS CONFIGURATION -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end pt-4 border-t border-green-200">
+                    <div class="w-full">
+                        <label for="prometheus-url-input" class="block text-sm font-medium text-gray-700">Prometheus Server URL (Base)</label>
+                        <input type="url" id="prometheus-url-input" name="prometheus_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="e.g., http://my-prometheus:9090">
+                    </div>
+                    <div class="w-full">
+                        <label for="health-check-endpoint-input" class="block text-sm font-medium text-gray-700">Health Check Endpoint</label>
+                        <input type="text" id="health-check-endpoint-input" name="health_check_endpoint" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="e.g., api/v1/status/tsdb">
+                    </div>
+                </div>
+                <!-- END PROMETHEUS FIELDS -->
+                
                 <div class="flex justify-end">
                     <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">Add Platform</button>
                 </div>
@@ -172,6 +194,15 @@
                         <label for="new-grafana-url-input" class="block text-sm font-medium text-gray-700">New Grafana URL</label>
                         <input type="url" id="new-grafana-url-input" name="grafana_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
                     </div>
+                    <!-- FIELDS FOR UPDATE -->
+                    <div class="w-full">
+                        <label for="new-prometheus-url-input" class="block text-sm font-medium text-gray-700">New Prometheus URL</label>
+                        <input type="url" id="new-prometheus-url-input" name="prometheus_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional URL">
+                    </div>
+                    <div class="w-full md:col-span-2">
+                        <label for="new-health-check-endpoint-input" class="block text-sm font-medium text-gray-700">New Health Check Endpoint</label>
+                        <input type="text" id="new-health-check-endpoint-input" name="health_check_endpoint" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Optional Endpoint">
+                    </div>
                 </div>
                 <div class="flex justify-end">
                     <button type="submit" class="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">Update Platform</button>
@@ -198,6 +229,19 @@
         
     </main>
 
+    <div id="message-modal" class="modal hidden flex items-center justify-center">
+        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 id="modal-title" class="text-lg leading-6 font-medium text-gray-900 mb-4"></h3>
+            <p id="modal-message" class="text-sm text-gray-500"></p>
+            <div class="mt-5 flex justify-end" id="modal-footer">
+                <button id="modal-close" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
         // Addition/Deletion related constants
         const deletePlatformForm = document.getElementById('delete-platform-form');
@@ -206,11 +250,17 @@
         const addPlatformForm = document.getElementById('add-platform-form');
         const addPlatformFeedback = document.getElementById('platform-feedback-message');
 
-        // NEW Update related constants
+        // NEW inputs for adding platforms
+        const prometheusUrlInput = document.getElementById('prometheus-url-input');
+        const healthCheckEndpointInput = document.getElementById('health-check-endpoint-input');
+        
+        // Update related constants
         const updatePlatformForm = document.getElementById('update-platform-form');
         const platformUpdateMenu = document.getElementById('platform-update-menu');
         const newPlatformNameInput = document.getElementById('new-platform-name-input');
         const newGrafanaUrlInput = document.getElementById('new-grafana-url-input');
+        const newPrometheusUrlInput = document.getElementById('new-prometheus-url-input');
+        const newHealthCheckEndpointInput = document.getElementById('new-health-check-endpoint-input');
         const updatePlatformFeedback = document.getElementById('update-platform-feedback-message');
 
         
@@ -227,9 +277,42 @@
             RFS: document.getElementById('date-rfs')
         };
         
+        // Modal functions and constants
+        const messageModal = document.getElementById('message-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalFooter = document.getElementById('modal-footer');
+        const modalClose = document.getElementById('modal-close');
+
+
+        // Function to show a simple notification modal
+        function showMessage(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            
+            // Clear and set for simple 'OK' button
+            modalFooter.innerHTML = '';
+            const okButton = document.createElement('button');
+            okButton.id = 'modal-close-simple';
+            okButton.textContent = 'OK';
+            okButton.className = 'px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500';
+            okButton.onclick = hideMessage;
+            modalFooter.appendChild(okButton);
+
+            messageModal.classList.remove('hidden');
+            messageModal.classList.add('flex');
+        }
+
+        // Function to hide the modal
+        function hideMessage() {
+            messageModal.classList.remove('flex');
+            messageModal.classList.add('hidden');
+        }
+
+
         // --- Progress Bar Logic ---
         function renderProgressBar(progressData) {
-            // Reset all circles and lines
+            // Reset logic remains the same...
             progressStages.forEach(stage => {
                 const stageCircle = document.getElementById(`stage-${stage.toLowerCase()}`);
                 const stageLine = stageCircle.parentElement.nextElementSibling;
@@ -309,11 +392,11 @@
                 
                 const result = await response.json();
                 if (result.status === 'success') {
-                    alert('Progress updated successfully!');
+                    showMessage('Success', 'Progress updated successfully!');
                     fetchProgressAndRender(progressMenu.value);
                     progressForm.reset();
                 } else {
-                    alert('Failed to update progress: ' + result.message);
+                    showMessage('Error', 'Failed to update progress: ' + result.message);
                 }
             });
         }
@@ -322,8 +405,9 @@
         addPlatformForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const platformName = document.getElementById('platform-name-input').value;
-            // Get the new Grafana URL input
             const grafanaUrl = document.getElementById('grafana-url-input').value;
+            const prometheusUrl = prometheusUrlInput.value;
+            const healthCheckEndpoint = healthCheckEndpointInput.value;
 
             addPlatformFeedback.classList.add('hidden');
             
@@ -332,7 +416,9 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     platform_name: platformName,
-                    grafana_url: grafanaUrl // Send the new field
+                    grafana_url: grafanaUrl,
+                    prometheus_url: prometheusUrl,
+                    health_check_endpoint: healthCheckEndpoint
                 })
             });
 
@@ -343,7 +429,6 @@
                 addPlatformFeedback.classList.add('bg-green-100', 'text-green-700');
                 addPlatformFeedback.textContent = 'Platform added successfully! Please refresh the page to see the changes.';
                 
-                // Re-fetch platform list and update all platform dropdowns
                 await updatePlatformDropdowns();
                 addPlatformForm.reset();
             } else {
@@ -353,7 +438,7 @@
             }
         });
 
-        // NEW: Platform Update Logic
+        // Platform Update Logic
         if (updatePlatformForm) {
             updatePlatformForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -361,6 +446,8 @@
                 const oldPlatformName = platformUpdateMenu.value;
                 const newPlatformName = newPlatformNameInput.value.trim();
                 const grafanaUrl = newGrafanaUrlInput.value.trim();
+                const prometheusUrl = newPrometheusUrlInput.value.trim();
+                const healthCheckEndpoint = newHealthCheckEndpointInput.value.trim();
 
                 if (!oldPlatformName || !newPlatformName) {
                     updatePlatformFeedback.classList.remove('hidden');
@@ -375,7 +462,9 @@
                 const data = {
                     old_platform_name: oldPlatformName,
                     new_platform_name: newPlatformName,
-                    grafana_url: grafanaUrl
+                    grafana_url: grafanaUrl,
+                    prometheus_url: prometheusUrl,
+                    health_check_endpoint: healthCheckEndpoint
                 };
 
                 const response = await fetch('/api/update_platform', {
@@ -392,18 +481,13 @@
                     updatePlatformFeedback.classList.add('bg-green-100', 'text-green-700');
                     updatePlatformFeedback.textContent = result.message + ' Note: You may need to refresh the main dashboard (index.html) to see the card name updated.';
 
-                    // Update all platform dropdowns and re-fetch documents/progress if the name changed
                     await updatePlatformDropdowns();
-                    
-                    // Clear the input fields
                     updatePlatformForm.reset();
 
                     if (oldPlatformName !== newPlatformName) {
-                        // Trigger re-fetch for progress for the new name
                         document.getElementById('platform-progress-menu').value = newPlatformName;
                         fetchProgressAndRender(newPlatformName);
                     } else {
-                        // If only URL changed, just reset the form and re-render progress (no name change to worry about)
                         fetchProgressAndRender(oldPlatformName);
                     }
                 } else {
@@ -415,7 +499,7 @@
         }
 
 
-        // Platform Deletion Logic
+        // FIXED: Platform Deletion Logic
         deletePlatformForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const platformName = platformDeleteMenu.value;
@@ -428,10 +512,48 @@
                 return;
             }
 
-            if (!window.confirm(`WARNING: Are you sure you want to permanently delete the platform "${platformName}"? This action cannot be undone and will delete the platform card from the dashboard, ALL its progress data, ALL associated documents from the table, AND the physical uploaded files from the server.`)) {
+            // --- Simplified Confirmation Modal ---
+            const confirmDelete = await new Promise(resolve => {
+                modalTitle.textContent = 'Confirm Permanent Deletion';
+                modalMessage.textContent = `WARNING: Are you sure you want to permanently delete the platform "${platformName}"? This action cannot be undone and will delete ALL associated data (dashboard card, progress, documents, and physical files).`;
+
+                // Clear existing footer and add new confirmation buttons
+                modalFooter.innerHTML = '';
+                
+                const cancelButton = document.createElement('button');
+                cancelButton.textContent = 'Cancel';
+                cancelButton.className = 'px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-1/2 shadow-sm hover:bg-gray-400 focus:outline-none';
+                cancelButton.style.marginRight = '0.5rem';
+
+                const confirmButton = document.createElement('button');
+                confirmButton.textContent = 'Confirm Delete';
+                confirmButton.className = 'px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-1/2 shadow-sm hover:bg-red-700 focus:outline-none';
+
+                modalFooter.appendChild(cancelButton);
+                modalFooter.appendChild(confirmButton);
+                modalFooter.classList.add('flex', 'justify-end', 'space-x-3'); // Ensure buttons are inline
+
+                messageModal.classList.remove('hidden');
+                messageModal.classList.add('flex');
+
+                confirmButton.onclick = () => {
+                    hideMessage();
+                    resolve(true); // User confirmed
+                };
+
+                cancelButton.onclick = () => {
+                    hideMessage();
+                    resolve(false); // User canceled
+                };
+            });
+            // --- End Confirmation Modal ---
+
+
+            if (!confirmDelete) {
                 return;
             }
 
+            // Proceed with deletion API call
             deletePlatformFeedback.classList.add('hidden');
 
             const response = await fetch('/api/delete_platform', {
@@ -450,8 +572,13 @@
 
                 // Update all platform dropdowns
                 await updatePlatformDropdowns();
-                // Clear the selection
                 platformDeleteMenu.value = '';
+                
+                // Also reset progress bar if the deleted platform was selected
+                if (progressMenu.value === platformName) {
+                    renderProgressBar([]);
+                }
+
             } else {
                 deletePlatformFeedback.classList.remove('bg-green-100', 'text-green-700');
                 deletePlatformFeedback.classList.add('bg-red-100', 'text-red-700');
@@ -461,6 +588,7 @@
 
         // Helper function to update all platform dropdowns by re-fetching the HTML
         async function updatePlatformDropdowns() {
+            // Using fetch to get the HTML content of the page
             const platformsResponse = await fetch('/platform_tracker');
             const parser = new DOMParser();
             const doc = parser.parseFromString(await platformsResponse.text(), 'text/html');

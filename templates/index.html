@@ -140,13 +140,17 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {% for platform in platforms %}
-            <div class="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col items-center p-6 text-center transform hover:scale-105 transition duration-300 ease-in-out">
+            <div class="platform-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col items-center p-6 text-center transform hover:scale-105 transition duration-300 ease-in-out" 
+                 data-platform-id="{{ platform.id }}"
+                 data-platform-name="{{ platform.name }}">
                 <img src="{{ platform.image_url }}" alt="{{ platform.name }} Logo" class="w-24 h-24 rounded-full mb-4">
                 <h3 class="text-xl font-semibold mb-1">{{ platform.name }}</h3>
-                <span class="text-sm font-medium px-3 py-1 rounded-full 
-                    {% if platform.status == 'Online' %} bg-green-100 text-green-700 {% else %} bg-red-100 text-red-700 {% endif %}">
-                    Status: {{ platform.status }}
+                
+                <!-- Status element: Start with 'Loading...' -->
+                <span id="status-{{ platform.id }}" class="status-badge text-sm font-medium px-3 py-1 rounded-full bg-gray-200 text-gray-600">
+                    Status: Loading...
                 </span>
+                
                 <div class="mt-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 w-full">
                     <button onclick="viewGrafana('{{ platform.grafana_url }}')" class="w-full bg-blue-500 text-white py-2 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200">
                         View KPI
@@ -199,6 +203,8 @@
         }
 
         function hideMessage() {
+            modalTitle.textContent = '';
+            modalMessage.textContent = '';
             messageModal.classList.remove('flex');
             messageModal.classList.add('hidden');
         }
@@ -216,18 +222,71 @@
             }
         });
 
-        // MODIFIED: This function now opens the Grafana URL in a new tab.
         function viewGrafana(url) {
-            // Check if the URL is not empty or null before trying to open it
             if (url) {
                 window.open(url, '_blank');
             } else {
-                // Optionally, show a message if the URL is missing
                 showMessage('URL Missing', 'No KPI dashboard URL is configured for this platform.');
             }
         }
+        
+        // --- NEW ASYNCHRONOUS STATUS CHECK LOGIC ---
 
-        // The 'closeModal' function has been removed as it's no longer needed.
+        // Helper function to update the badge's appearance
+        function updateStatusBadge(badgeElement, status) {
+            badgeElement.textContent = `Status: ${status}`;
+            
+            // Remove all existing status classes
+            badgeElement.classList.remove('bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700', 'bg-yellow-100', 'text-yellow-700', 'bg-gray-200', 'text-gray-600');
+            
+            // Apply new classes based on status
+            if (status === 'Online') {
+                badgeElement.classList.add('bg-green-100', 'text-green-700');
+            } else if (status === 'Offline' || status.startsWith('Error')) {
+                badgeElement.classList.add('bg-red-100', 'text-red-700');
+            } else {
+                // Config Missing, Loading, etc.
+                badgeElement.classList.add('bg-yellow-100', 'text-yellow-700');
+            }
+        }
+
+        // Function to fetch the status for a single platform
+        async function fetchPlatformStatus(platformId) {
+            try {
+                const response = await fetch(`/api/platform_status/${platformId}`);
+                if (!response.ok) {
+                    throw new Error('API failed to return status.');
+                }
+                const data = await response.json();
+                return data.status;
+            } catch (error) {
+                console.error(`Failed to fetch status for ID ${platformId}:`, error);
+                return 'Check Failed'; // Return a definitive error state on network/API failure
+            }
+        }
+
+        // Main function to initialize all status checks
+        async function initializeStatusChecks() {
+            const platformCards = document.querySelectorAll('.platform-card');
+            
+            platformCards.forEach(card => {
+                const platformId = card.dataset.platformId;
+                const statusBadge = document.getElementById(`status-${platformId}`);
+                
+                // Fire off the asynchronous check immediately (non-blocking)
+                fetchPlatformStatus(platformId).then(status => {
+                    updateStatusBadge(statusBadge, status);
+                }).catch(error => {
+                    // This catch handles errors from the promise resolution itself
+                    updateStatusBadge(statusBadge, 'Check Failed');
+                });
+            });
+        }
+
+        // Start the process when the page is fully loaded
+        document.addEventListener('DOMContentLoaded', initializeStatusChecks);
+        
+        // --- END NEW ASYNCHRONOUS STATUS CHECK LOGIC ---
     </script>
 </body>
 </html>

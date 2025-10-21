@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from dotenv import load_dotenv
 from functools import wraps
 from werkzeug.utils import secure_filename
+import requests # Import for making HTTP requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -91,6 +92,97 @@ def log_event_action(username, action):
         cursor.execute('INSERT INTO events_logs (username, action, timestamp) VALUES (%s, %s, %s)', (username, action, timestamp))
         db.commit()
 
+# MODIFIED: Helper function to check platform status, supporting both direct HTTP and PromQL
+def check_platform_status(prometheus_url, health_check_endpoint):
+    """
+    Checks the platform status.
+    If 'health_check_endpoint' looks like a PromQL query, it uses the Prometheus API.
+    Otherwise, it performs a direct GET request.
+    """
+    if not prometheus_url or not health_check_endpoint:
+        return 'Config Missing'
+    
+    # 1. Check if the endpoint looks like a PromQL query (contains metric name and label filters)
+    is_promql = any(char in health_check_endpoint for char in ['{', '}', '=', '~'])
+
+    if is_promql:
+        # --- PromQL Query Logic ---
+        
+        # Ensure the Prom URL is correctly formed for the query API
+        prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query"
+        
+        try:
+            # Send the PromQL query to the Prometheus server
+            response = requests.get(
+                prom_query_url, 
+                params={'query': health_check_endpoint}, 
+                timeout=10 # Use a longer timeout for PromQL queries if they are complex
+            )
+            response.raise_for_status() # Raise exception for bad status codes (4xx or 5xx)
+            
+            data = response.json()
+            
+            if data['status'] == 'success' and data['data']['result']:
+                # PromQL result is an array of vectors. We check the value of the first one.
+                # A value of '1' usually means the probe was successful/online.
+                # The value is a string, e.g., ['1698200000', '1']
+                metric_value = float(data['data']['result'][0]['value'][1])
+                
+                if metric_value >= 1.0:
+                    return 'Online'
+                else:
+                    return 'Offline (Metric 0)'
+            else:
+                # Query succeeded but returned no data (e.g., target offline)
+                return 'Offline (No Metric)'
+
+        except requests.exceptions.HTTPError as e:
+            # Prometheus server responded with an error (e.g., 400 Bad Request for invalid query)
+            return f'Error (Prometheus HTTP {response.status_code})'
+        except requests.exceptions.RequestException as e:
+            # Connection errors, timeouts, etc.
+            print(f"Error executing PromQL query against {prom_query_url}: {e}")
+            return 'Offline (Prometheus Down)'
+        except (ValueError, KeyError, IndexError) as e:
+            # JSON parsing error or unexpected data structure
+            print(f"Error processing PromQL response: {e}")
+            return 'Error (Data Parse)'
+            
+    else:
+        # --- Direct HTTP Endpoint Logic ---
+        
+        # Construct the full URL, ensuring only one separator
+        full_url = f"{prometheus_url.rstrip('/')}/{health_check_endpoint.lstrip('/')}"
+        
+        try:
+            # Perform direct GET request to the platform endpoint
+            response = requests.get(full_url, timeout=5)
+            
+            if 200 <= response.status_code < 300:
+                return 'Online'
+            else:
+                return f'Error ({response.status_code})'
+                
+        except requests.exceptions.RequestException as e:
+            print(f"Error checking status for {full_url}: {e}")
+            return 'Offline'
+
+# NEW: API endpoint to check and return the status of a single platform (used by JS)
+@app.route('/api/platform_status/<int:platform_id>')
+@login_required
+def get_platform_status(platform_id):
+    db = get_db()
+    cursor = db.cursor(MySQLdb.cursors.DictCursor)
+    
+    cursor.execute('SELECT prometheus_url, health_check_endpoint FROM platforms WHERE id = %s', (platform_id,))
+    platform = cursor.fetchone()
+
+    if platform:
+        status = check_platform_status(platform.get('prometheus_url'), platform.get('health_check_endpoint'))
+        return jsonify({'status': status})
+    
+    return jsonify({'status': 'Not Found'}), 404
+
 # Route for the login page
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
@@ -134,16 +226,22 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# Route for the main dashboard page
+# MODIFIED: Route for the main dashboard page - NO LONGER PERFORMS SYNCHRONOUS CHECKS
 @app.route('/dashboard')
 @login_required
 def dashboard():
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
-    cursor.execute('SELECT * FROM platforms')
-    platforms = cursor.fetchall()
     
-    return render_template('index.html', platforms=platforms)
+    # Select all fields required for rendering the dashboard card.
+    cursor.execute('SELECT id, name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint FROM platforms')
+    platforms_raw = cursor.fetchall()
+    
+    # Send the raw platform data to the template. The status displayed will
+    # initially be set by the template via JavaScript (e.g., "Loading...").
+    # The original 'status' column in the database is no longer updated or relied upon for real-time check.
+    
+    return render_template('index.html', platforms=platforms_raw)
 
 # Routes for menu items
 @app.route('/user_management')
@@ -217,7 +315,7 @@ def documents():
     
     return render_template('documents.html', documents=documents, platforms=platforms)
 
-# API endpoint to add a new platform
+# MODIFIED: API endpoint to add a new platform, including Prometheus configuration
 @app.route('/api/add_platform', methods=['POST'])
 @login_required
 def add_platform():
@@ -226,22 +324,25 @@ def add_platform():
     data = request.json
     
     platform_name = data.get('platform_name')
-    grafana_url = data.get('grafana_url', '') # Get new field
+    grafana_url = data.get('grafana_url', '')
+    # NEW FIELDS: Extract Prometheus configuration
+    prometheus_url = data.get('prometheus_url', '')
+    health_check_endpoint = data.get('health_check_endpoint', '')
 
     if not platform_name:
         return jsonify({'status': 'error', 'message': 'Platform name is required'}), 400
     
-    # FIX: Change 'status' from None to an empty string to satisfy NOT NULL constraint
-    status = '' # Default to empty string instead of NULL
+    # Initial status is set to 'Unknown'
+    status = 'Unknown' 
     manage_url = "https://techpam.etisalat.corp.ae/SecretServer/Login.aspxReturnUrl=%2fSecretServer%2fdefault.aspx"
-    image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name # Retain old default
-    manage_type = '' # Retain old default
+    image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name
+    manage_type = ''
     
     try:
         # Insert into platforms table with updated fields
         cursor.execute(
-            'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url) VALUES (%s, %s, %s, %s, %s, %s)',
-            (platform_name, status, image_url, grafana_url, manage_type, manage_url)
+            'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+            (platform_name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint)
         )
         
         # Insert into platform_progress table without 'progress_stage' and 'stage_date'
@@ -257,7 +358,7 @@ def add_platform():
         db.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-# NEW API endpoint to update a platform's name and/or Grafana URL
+# MODIFIED: API endpoint to update a platform's details, including Prometheus configuration
 @app.route('/api/update_platform', methods=['POST'])
 @login_required
 def update_platform():
@@ -268,6 +369,9 @@ def update_platform():
     old_platform_name = data.get('old_platform_name')
     new_platform_name = data.get('new_platform_name')
     grafana_url = data.get('grafana_url', '')
+    # NEW FIELDS: Extract Prometheus configuration
+    prometheus_url = data.get('prometheus_url', '')
+    health_check_endpoint = data.get('health_check_endpoint', '')
 
     if not old_platform_name or not new_platform_name:
         return jsonify({'status': 'error', 'message': 'Old and New Platform names are required for update'}), 400
@@ -291,15 +395,15 @@ def update_platform():
             # 3. Update documents records (cascading update)
             cursor.execute('UPDATE documents SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
 
-        # 4. Update the platform itself (name and Grafana URL)
+        # 4. Update the platform itself (name, Grafana URL, and new Prometheus fields)
         cursor.execute(
-            'UPDATE platforms SET name = %s, grafana_url = %s WHERE name = %s',
-            (new_platform_name, grafana_url, old_platform_name)
+            'UPDATE platforms SET name = %s, grafana_url = %s, prometheus_url = %s, health_check_endpoint = %s WHERE name = %s',
+            (new_platform_name, grafana_url, prometheus_url, health_check_endpoint, old_platform_name)
         )
         
         db.commit()
         
-        log_event_action(session.get('username'), f'Updated platform from "{old_platform_name}" to "{new_platform_name}" (Grafana URL updated)')
+        log_event_action(session.get('username'), f'Updated platform from "{old_platform_name}" to "{new_platform_name}" (URLs updated)')
         return jsonify({'status': 'success', 'message': f'Platform "{old_platform_name}" updated to "{new_platform_name}" successfully'})
     except MySQLdb.Error as e:
         db.rollback()
