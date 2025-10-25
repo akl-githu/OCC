@@ -182,6 +182,141 @@ def get_platform_status(platform_id):
     
     return jsonify({'status': status})
 
+# NEW: Route to get detailed Prometheus query status (returning HTML fragment for iframe)
+@app.route('/api/platform_prom_status_html/<int:platform_id>')
+@login_required
+def get_platform_prom_status_html(platform_id):
+    db = get_db()
+    cursor = db.cursor(MySQLdb.cursors.DictCursor)
+    
+    cursor.execute('SELECT name, prometheus_url FROM platforms WHERE id = %s', (platform_id,))
+    platform = cursor.fetchone()
+
+    if not platform:
+        return "Platform not found", 404
+
+    cursor.execute(
+        'SELECT query_name, promql_query FROM platform_prom_queries WHERE platform_name = %s', 
+        (platform['name'],)
+    )
+    queries = cursor.fetchall()
+    
+    prometheus_url = platform.get('prometheus_url')
+    prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query" if prometheus_url else None
+    
+    # --- Start HTML Generation for Iframe Content ---
+    # This minimal HTML structure includes Tailwind-like styling in a single <style> block 
+    # for a clean, self-contained view inside the iframe.
+    html_content = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: 'Inter', sans-serif; background-color: #f7f7f7; padding: 15px; margin: 0; }}
+                .table-container {{ background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); overflow-x: auto; }}
+                table {{ width: 100%; border-collapse: collapse; }}
+                th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; font-size: 14px; }}
+                th {{ background-color: #eef2ff; color: #374151; font-weight: 600; }}
+                tr:hover {{ background-color: #f3f4f6; }}
+                .status-badge {{ display: inline-block; padding: 4px 8px; border-radius: 9999px; font-weight: 600; font-size: 12px; }}
+                .status-success {{ background-color: #d1fae5; color: #059669; }}
+                .status-failure {{ background-color: #fee2e2; color: #ef4444; }}
+                .status-error {{ background-color: #fef3c7; color: #f59e0b; }}
+                .query-text {{ font-family: monospace; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; display: inline-block; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }}
+            </style>
+        </head>
+        <body>
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-bottom: 15px;">Prometheus Query Status: {platform['name']}</h2>
+        <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Query Name</th>
+                    <th>HTTP Status</th>
+                    <th>Result Status</th>
+                    <th>PromQL Query</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    if not prometheus_url or not queries:
+        html_content += f"""
+            <tr>
+                <td colspan="4" style="text-align: center; color: #9ca3af; padding: 20px;">Configuration missing: Prometheus URL or queries are not set for this platform.</td>
+            </tr>
+        """
+    else:
+        for query_data in queries:
+            promql_query = query_data['promql_query']
+            query_name = query_data.get('query_name', 'Unnamed Query') 
+            
+            http_status = 0
+            result_status = 'N/A'
+            badge_class = 'status-error'
+            
+            try:
+                # IMPORTANT: Set a low timeout to prevent the iframe from hanging the main page
+                response = requests.get(
+                    prom_query_url, 
+                    params={'query': promql_query}, 
+                    timeout=5 
+                )
+                
+                http_status = response.status_code
+                
+                if 200 <= response.status_code < 300:
+                    data = response.json()
+                    
+                    if data['status'] == 'success':
+                        if data['data']['result']:
+                            metric_value = float(data['data']['result'][0]['value'][1])
+                            if metric_value >= 1.0:
+                                result_status = f'Success ({metric_value})'
+                                badge_class = 'status-success'
+                            else:
+                                result_status = f'Failed ({metric_value})'
+                                badge_class = 'status-failure'
+                        else:
+                            result_status = 'Success (No Data)'
+                            badge_class = 'status-failure'
+                    elif data['status'] == 'error':
+                        result_status = f"Prom Error: {data.get('errorType', 'Unknown')}"
+                        badge_class = 'status-error'
+                    
+                else:
+                    result_status = f'HTTP Error'
+                    badge_class = 'status-failure'
+                    
+
+            except requests.exceptions.RequestException:
+                result_status = f'Connection Error'
+                http_status = 'Timeout'
+                badge_class = 'status-error'
+            except (ValueError, KeyError, IndexError):
+                result_status = f'Parse Error'
+                badge_class = 'status-error'
+            
+            # Use safe formatting for HTML insertion
+            html_content += f"""
+                <tr>
+                    <td>{query_name}</td>
+                    <td>{http_status}</td>
+                    <td><span class="status-badge {badge_class}">{result_status}</span></td>
+                    <td><span class="query-text" title="{promql_query}">{promql_query}</span></td>
+                </tr>
+            """
+            
+    html_content += """
+            </tbody>
+        </table>
+        </div>
+        </body>
+        </html>
+    """
+    
+    return html_content
 # Route for the login page
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/login', methods=['GET', 'POST'])
