@@ -92,96 +92,95 @@ def log_event_action(username, action):
         cursor.execute('INSERT INTO events_logs (username, action, timestamp) VALUES (%s, %s, %s)', (username, action, timestamp))
         db.commit()
 
-# MODIFIED: Helper function to check platform status, supporting both direct HTTP and PromQL
-def check_platform_status(prometheus_url, health_check_endpoint):
+# MODIFIED: Helper function to check platform status using MULTIPLE PromQL queries
+def check_platform_status(prometheus_url, queries):
     """
-    Checks the platform status.
-    If 'health_check_endpoint' looks like a PromQL query, it uses the Prometheus API.
-    Otherwise, it performs a direct GET request.
-    """
-    if not prometheus_url or not health_check_endpoint:
-        return 'Config Missing'
+    Checks the platform status by executing multiple PromQL queries.
+    Status is 'Online' ONLY if ALL queries return a successful result (PromQL value >= 1.0).
+    Otherwise, the status is 'Offline' or an 'Error' message indicating the failure.
     
-    # 1. Check if the endpoint looks like a PromQL query (contains metric name and label filters)
-    is_promql = any(char in health_check_endpoint for char in ['{', '}', '=', '~'])
-
-    if is_promql:
-        # --- PromQL Query Logic ---
-        
-        # Ensure the Prom URL is correctly formed for the query API
-        prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query"
+    Args:
+        prometheus_url (str): The base URL of the Prometheus server.
+        queries (list): A list of dictionaries, where each dict contains 'promql_query' and 'query_name'.
+    """
+    if not prometheus_url:
+        return 'Config Missing (Prom URL)'
+    if not queries:
+        return 'Config Missing (Queries)'
+    
+    # Prepare Prometheus query URL
+    prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query"
+    
+    for query_data in queries:
+        promql_query = query_data['promql_query']
+        query_name = query_data.get('query_name', 'Unnamed Query') 
         
         try:
             # Send the PromQL query to the Prometheus server
             response = requests.get(
                 prom_query_url, 
-                params={'query': health_check_endpoint}, 
-                timeout=10 # Use a longer timeout for PromQL queries if they are complex
+                params={'query': promql_query}, 
+                timeout=10 
             )
-            response.raise_for_status() # Raise exception for bad status codes (4xx or 5xx)
             
+            # Check for HTTP status codes (4xx or 5xx) - REQUIRED: all return codes must be 2XX
+            # If the Prometheus server itself returns an error (4xx/5xx), it's a critical failure.
+            if not (200 <= response.status_code < 300):
+                return f'Error ({query_name} HTTP {response.status_code})'
+
             data = response.json()
             
+            # Check Prometheus internal status and result
             if data['status'] == 'success' and data['data']['result']:
-                # PromQL result is an array of vectors. We check the value of the first one.
+                # PromQL result is an array of vectors. Check the value of the first one.
                 # A value of '1' usually means the probe was successful/online.
-                # The value is a string, e.g., ['1698200000', '1']
                 metric_value = float(data['data']['result'][0]['value'][1])
                 
-                if metric_value >= 1.0:
-                    return 'Online'
-                else:
-                    return 'Offline (Metric 0)'
+                if metric_value < 1.0:
+                    # FAILURE: Metric value indicates problem (e.g., up metric is 0)
+                    return f'Offline ({query_name} Metric < 1)'
             else:
-                # Query succeeded but returned no data (e.g., target offline)
-                return 'Offline (No Metric)'
+                # FAILURE: Query succeeded but returned no data (target down/missing)
+                return f'Offline ({query_name} No Data)'
 
-        except requests.exceptions.HTTPError as e:
-            # Prometheus server responded with an error (e.g., 400 Bad Request for invalid query)
-            return f'Error (Prometheus HTTP {response.status_code})'
         except requests.exceptions.RequestException as e:
-            # Connection errors, timeouts, etc.
-            print(f"Error executing PromQL query against {prom_query_url}: {e}")
-            return 'Offline (Prometheus Down)'
+            # FAILURE: Connection errors, timeouts, etc.
+            print(f"Error executing PromQL query {promql_query}: {e}")
+            return f'Offline ({query_name} Conn Error)'
         except (ValueError, KeyError, IndexError) as e:
-            # JSON parsing error or unexpected data structure
-            print(f"Error processing PromQL response: {e}")
-            return 'Error (Data Parse)'
+            # FAILURE: JSON parsing error or unexpected data structure
+            print(f"Error processing PromQL response for {promql_query}: {e}")
+            return f'Error ({query_name} Data Parse)'
             
-    else:
-        # --- Direct HTTP Endpoint Logic ---
-        
-        # Construct the full URL, ensuring only one separator
-        full_url = f"{prometheus_url.rstrip('/')}/{health_check_endpoint.lstrip('/')}"
-        
-        try:
-            # Perform direct GET request to the platform endpoint
-            response = requests.get(full_url, timeout=5)
-            
-            if 200 <= response.status_code < 300:
-                return 'Online'
-            else:
-                return f'Error ({response.status_code})'
-                
-        except requests.exceptions.RequestException as e:
-            print(f"Error checking status for {full_url}: {e}")
-            return 'Offline'
+    # If the loop completes without returning 'Offline' or 'Error', ALL queries passed.
+    return 'Online'
 
-# NEW: API endpoint to check and return the status of a single platform (used by JS)
+# MODIFIED: API endpoint to check and return the status of a single platform (used by JS)
 @app.route('/api/platform_status/<int:platform_id>')
 @login_required
 def get_platform_status(platform_id):
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
     
-    cursor.execute('SELECT prometheus_url, health_check_endpoint FROM platforms WHERE id = %s', (platform_id,))
+    # 1. Get the platform name and base Prometheus URL
+    # NOTE: health_check_endpoint is no longer in this table, but fetching base URL is necessary
+    cursor.execute('SELECT name, prometheus_url FROM platforms WHERE id = %s', (platform_id,))
     platform = cursor.fetchone()
 
-    if platform:
-        status = check_platform_status(platform.get('prometheus_url'), platform.get('health_check_endpoint'))
-        return jsonify({'status': status})
+    if not platform:
+        return jsonify({'status': 'Not Found'}), 404
+
+    # 2. Get the list of associated queries from the new table
+    cursor.execute(
+        'SELECT query_name, promql_query FROM platform_prom_queries WHERE platform_name = %s', 
+        (platform['name'],)
+    )
+    queries = cursor.fetchall()
     
-    return jsonify({'status': 'Not Found'}), 404
+    # 3. Execute the status check with the list of queries
+    status = check_platform_status(platform.get('prometheus_url'), queries)
+    
+    return jsonify({'status': status})
 
 # Route for the login page
 @app.route('/', methods=['GET', 'POST'])
@@ -198,7 +197,6 @@ def login():
         cursor = db.cursor(MySQLdb.cursors.DictCursor)
         
         # NOTE: Passwords are not hashed. This is for demonstration only.
-        # In a real application, hash and salt passwords!
         cursor.execute('SELECT * FROM users WHERE username = %s AND password = %s', (username, password,))
         user = cursor.fetchone()
         
@@ -226,20 +224,16 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# MODIFIED: Route for the main dashboard page - NO LONGER PERFORMS SYNCHRONOUS CHECKS
+# Route for the main dashboard page 
 @app.route('/dashboard')
 @login_required
 def dashboard():
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
     
-    # Select all fields required for rendering the dashboard card.
-    cursor.execute('SELECT id, name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint FROM platforms')
+    # NOTE: health_check_endpoint is removed from SELECT query as it no longer exists
+    cursor.execute('SELECT id, name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url FROM platforms')
     platforms_raw = cursor.fetchall()
-    
-    # Send the raw platform data to the template. The status displayed will
-    # initially be set by the template via JavaScript (e.g., "Loading...").
-    # The original 'status' column in the database is no longer updated or relied upon for real-time check.
     
     return render_template('index.html', platforms=platforms_raw)
 
@@ -286,7 +280,7 @@ def events_logs():
 
     return render_template('event_logs.html', logs=logs)
 
-# MODIFIED: Route for the platform tracker page to pass the user's role
+# Route for the platform tracker page
 @app.route('/platform_tracker')
 @login_required
 def platform_tracker():
@@ -302,7 +296,7 @@ def platform_tracker():
     
     return render_template('platform_tracker.html', platforms=platforms, user_role=user_role)
 
-# NEW Route for the documents page
+# Route for the documents page
 @app.route('/documents')
 @login_required
 def documents():
@@ -318,10 +312,10 @@ def documents():
     
     return render_template('documents.html', documents=documents, platforms=platforms)
 
-# MODIFIED: API endpoint to add a new platform, including Prometheus configuration
+# MODIFIED: API endpoint to add a new platform, handling multiple Prometheus queries
 @app.route('/api/add_platform', methods=['POST'])
 @login_required
-@admin_required # Platform CRUD should be admin restricted
+@admin_required 
 def add_platform():
     db = get_db()
     cursor = db.cursor()
@@ -329,43 +323,56 @@ def add_platform():
     
     platform_name = data.get('platform_name')
     grafana_url = data.get('grafana_url', '')
-    # NEW FIELDS: Extract Prometheus configuration
     prometheus_url = data.get('prometheus_url', '')
-    health_check_endpoint = data.get('health_check_endpoint', '')
+    # NEW FIELD: Extract the list of PromQL queries (array of strings)
+    prometheus_queries = data.get('prometheus_queries', []) 
 
     if not platform_name:
         return jsonify({'status': 'error', 'message': 'Platform name is required'}), 400
     
-    # Initial status is set to 'Unknown'
     status = 'Unknown' 
     manage_url = "https://techpam.etisalat.corp.ae/SecretServer/Login.aspxReturnUrl=%2fSecretServer%2fdefault.aspx"
     image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name
     manage_type = ''
     
     try:
-        # Insert into platforms table with updated fields
+        # 1. Insert into platforms table
+        # NOTE: health_check_endpoint removed from INSERT
         cursor.execute(
-            'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
-            (platform_name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url, health_check_endpoint)
+            'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url) VALUES (%s, %s, %s, %s, %s, %s, %s)',
+            (platform_name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url)
         )
         
-        # Insert into platform_progress table without 'progress_stage' and 'stage_date'
+        # 2. Insert multiple queries into platform_prom_queries table
+        if prometheus_queries and prometheus_url:
+            for i, query in enumerate(prometheus_queries):
+                # Use a generic, ordered name for each query
+                query_name = f'Query {i+1} ({platform_name})'
+                cursor.execute(
+                    'INSERT INTO platform_prom_queries (platform_name, query_name, promql_query) VALUES (%s, %s, %s)',
+                    (platform_name, query_name, query)
+                )
+        
+        # 3. Insert initial progress entry
         cursor.execute(
             'INSERT INTO platform_progress (platform_name, comments) VALUES (%s, %s)',
             (platform_name, 'Platform added - Initial entry')
         )
         
         db.commit()
-        log_event_action(session.get('username'), f'Added new platform: {platform_name}')
+        log_event_action(session.get('username'), f'Added new platform: {platform_name} with {len(prometheus_queries)} health queries')
         return jsonify({'status': 'success', 'message': 'Platform added successfully'})
     except MySQLdb.Error as e:
         db.rollback()
+        # Handle duplicate entry error (e.g., duplicate platform name)
+        if 'Duplicate entry' in str(e):
+             return jsonify({'status': 'error', 'message': f'Platform name "{platform_name}" already exists or another unique constraint failed.'}), 400
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-# MODIFIED: API endpoint to update a platform's details, including Prometheus configuration
+# MODIFIED: API endpoint to update a platform's details
 @app.route('/api/update_platform', methods=['POST'])
 @login_required
-@admin_required # Platform CRUD should be admin restricted
+@admin_required 
 def update_platform():
     db = get_db()
     cursor = db.cursor()
@@ -374,9 +381,8 @@ def update_platform():
     old_platform_name = data.get('old_platform_name')
     new_platform_name = data.get('new_platform_name')
     grafana_url = data.get('grafana_url', '')
-    # NEW FIELDS: Extract Prometheus configuration
     prometheus_url = data.get('prometheus_url', '')
-    health_check_endpoint = data.get('health_check_endpoint', '')
+    # NOTE: health_check_endpoint is no longer expected/used
 
     if not old_platform_name or not new_platform_name:
         return jsonify({'status': 'error', 'message': 'Old and New Platform names are required for update'}), 400
@@ -394,16 +400,20 @@ def update_platform():
             if cursor.rowcount > 0:
                 return jsonify({'status': 'error', 'message': f'Platform name "{new_platform_name}" already exists. Please choose a unique name.'}), 400
                 
-            # 2. Update platform_progress records (cascading update)
+            # 2. Update platform_progress records
             cursor.execute('UPDATE platform_progress SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
 
-            # 3. Update documents records (cascading update)
+            # 3. Update documents records
             cursor.execute('UPDATE documents SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
 
-        # 4. Update the platform itself (name, Grafana URL, and new Prometheus fields)
+            # NEW: 4. Update Prom Queries records
+            cursor.execute('UPDATE platform_prom_queries SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
+
+        # 5. Update the platform itself (name, URLs)
+        # NOTE: health_check_endpoint removed from UPDATE
         cursor.execute(
-            'UPDATE platforms SET name = %s, grafana_url = %s, prometheus_url = %s, health_check_endpoint = %s WHERE name = %s',
-            (new_platform_name, grafana_url, prometheus_url, health_check_endpoint, old_platform_name)
+            'UPDATE platforms SET name = %s, grafana_url = %s, prometheus_url = %s WHERE name = %s',
+            (new_platform_name, grafana_url, prometheus_url, old_platform_name)
         )
         
         db.commit()
@@ -415,10 +425,10 @@ def update_platform():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# NEW API endpoint to delete a platform and all its related data
+# MODIFIED: API endpoint to delete a platform and all its related data
 @app.route('/api/delete_platform', methods=['POST'])
 @login_required
-@admin_required # Platform CRUD should be admin restricted
+@admin_required 
 def delete_platform():
     db = get_db()
     cursor = db.cursor()
@@ -440,14 +450,16 @@ def delete_platform():
         # 3. Delete all related progress entries
         cursor.execute('DELETE FROM platform_progress WHERE platform_name = %s', (platform_name,))
         
-        # 4. Delete the platform itself
+        # NEW: 4. Delete all related Prom queries entries
+        cursor.execute('DELETE FROM platform_prom_queries WHERE platform_name = %s', (platform_name,))
+        
+        # 5. Delete the platform itself
         cursor.execute('DELETE FROM platforms WHERE name = %s', (platform_name,))
         
         db.commit()
         
-        # 5. Delete files from the filesystem
+        # 6. Delete files from the filesystem
         for (file_path,) in files_to_delete:
-            # Only attempt to delete files that exist and are within the UPLOAD_FOLDER
             if file_path.startswith(app.config['UPLOAD_FOLDER']) and os.path.exists(file_path):
                 os.remove(file_path)
         
@@ -458,7 +470,8 @@ def delete_platform():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# API endpoints for CRUD operations
+# API endpoints for CRUD operations (manage_users, manage_documents, get_platform_progress, manage_platform_progress, uploaded_file) remain unchanged.
+
 @app.route('/api/users', methods=['POST'])
 @login_required
 @admin_required
