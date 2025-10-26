@@ -48,6 +48,42 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* NEW: Styles for the failure counter badge */
+        .prom-icon-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .failure-counter {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            min-width: 20px;
+            height: 20px;
+            background-color: #ef4444; /* Tailwind red-500 */
+            color: white;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem; /* text-xs */
+            font-weight: 700;
+            padding: 2px;
+            line-height: 1;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            /* Hidden by default, shown by JS */
+            visibility: hidden;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .failure-counter.visible {
+            visibility: visible;
+            opacity: 1;
+            transform: scale(1);
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex flex-col md:flex-row min-h-screen">
@@ -170,10 +206,12 @@
                 </span>
                 
                 <div class="mt-6 flex space-x-2 w-full">
-                    <!-- Prometheus Status Icon -->
+                    <!-- Prometheus Status Icon (Updated to include counter span and container class) -->
                     <button onclick="showPrometheusStatus('{{ platform.id }}', '{{ platform.name }}')" 
-                            class="flex-shrink-0 bg-yellow-500 text-white p-2 rounded-lg hover:bg-yellow-600 transition-colors duration-200" 
+                            class="flex-shrink-0 bg-yellow-500 text-white p-2 rounded-lg hover:bg-yellow-600 transition-colors duration-200 prom-icon-container" 
                             title="View Prometheus Query Status Codes">
+                        <!-- Failure Counter Badge -->
+                        <span id="prom-fail-count-{{ platform.id }}" class="failure-counter">0</span>
                         <!-- Icon: Activity/Monitor -->
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
                     </button>
@@ -244,7 +282,7 @@
         const promModalTitle = document.getElementById('prom-modal-title');
         const promStatusIframe = document.getElementById('prom-status-iframe');
         const promModalClose = document.getElementById('prom-modal-close');
-        // NEW: Loading Container Reference
+        // Loading Container Reference
         const promLoadingContainer = document.getElementById('prom-loading-container');
 
         // Functions to handle the mobile sidebar
@@ -323,7 +361,7 @@
             }
         }
         
-        // --- ASYNCHRONOUS STATUS CHECK LOGIC (Unchanged) ---
+        // --- ASYNCHRONOUS STATUS CHECK LOGIC (UPDATED) ---
 
         // Helper function to update the badge's appearance
         function updateStatusBadge(badgeElement, status) {
@@ -333,15 +371,41 @@
             badgeElement.classList.remove('bg-green-100', 'text-green-700', 'bg-red-100', 'text-red-700', 'bg-yellow-100', 'text-yellow-700', 'bg-gray-200', 'text-gray-600');
             
             // Apply new classes based on status
-            if (status === 'Online') {
+            if (status.startsWith('Online')) {
                 badgeElement.classList.add('bg-green-100', 'text-green-700');
-            } else if (status === 'Offline' || status.startsWith('Error') || status.startsWith('Check Failed')) {
+            } else if (status.startsWith('Offline') || status.startsWith('Error') || status.startsWith('Check Failed')) {
                 badgeElement.classList.add('bg-red-100', 'text-red-700');
             } else {
                 // Config Missing, Loading, etc.
                 badgeElement.classList.add('bg-yellow-100', 'text-yellow-700');
             }
         }
+        
+        // Helper function to update the counter
+        function updateFailureCounter(platformId, count) {
+            const counterElement = document.getElementById(`prom-fail-count-${platformId}`);
+            if (counterElement) {
+                counterElement.textContent = count;
+                if (count > 0) {
+                    counterElement.classList.add('visible');
+                    // Add a warning/alert feel to the button itself when failure count > 0
+                    const button = counterElement.closest('button');
+                    if (button) {
+                        button.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                        button.classList.add('bg-red-500', 'hover:bg-red-600');
+                    }
+                } else {
+                    counterElement.classList.remove('visible');
+                    // Restore the button's default color when the count is 0
+                    const button = counterElement.closest('button');
+                    if (button) {
+                        button.classList.remove('bg-red-500', 'hover:bg-red-600');
+                        button.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                    }
+                }
+            }
+        }
+
 
         // Function to fetch the status for a single platform
         async function fetchPlatformStatus(platformId) {
@@ -350,11 +414,20 @@
                 if (!response.ok) {
                     throw new Error('API failed to return status.');
                 }
+                // Expects {status: "...", failure_count: N}
                 const data = await response.json();
+                
+                // Update the failure counter badge
+                updateFailureCounter(platformId, data.failure_count);
+                
                 return data.status;
             } catch (error) {
                 console.error(`Failed to fetch status for ID ${platformId}:`, error);
-                return 'Check Failed'; // Return a definitive error state on network/API failure
+                
+                // On a critical network/API communication error, show a default error state
+                // and highlight the counter as an indicator of the failure to check.
+                updateFailureCounter(platformId, 1); 
+                return 'Check Failed'; 
             }
         }
 

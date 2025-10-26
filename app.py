@@ -108,95 +108,96 @@ def log_event_action(username, action):
         cursor.execute('INSERT INTO events_logs (username, action, timestamp) VALUES (%s, %s, %s)', (username, action, timestamp))
         db.commit()
 
-# MODIFIED: Helper function to check platform status using MULTIPLE PromQL queries
+# MODIFIED: Helper function to check platform status and count failures
 def check_platform_status(prometheus_url, queries):
     """
     Checks the platform status by executing multiple PromQL queries.
-    Status is 'Online' ONLY if ALL queries return a successful result (PromQL value >= 1.0).
-    Otherwise, the status is 'Offline' or an 'Error' message indicating the failure.
-    
-    Args:
-        prometheus_url (str): The base URL of the Prometheus server.
-        queries (list): A list of dictionaries, where each dict contains 'promql_query' and 'query_name'.
+    Returns overall status and number of failing queries.
     """
-    if not prometheus_url:
-        return 'Config Missing (Prom URL)'
-    if not queries:
-        return 'Config Missing (Queries)'
+    failure_count = 0
     
-    # Prepare Prometheus query URL
+    if not prometheus_url:
+        return {'status': 'Config Missing (Prom URL)', 'failure_count': len(queries) if queries else 0}
+    if not queries:
+        return {'status': 'Config Missing (Queries)', 'failure_count': 0}
+    
     prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query"
+    overall_status = 'Online'
     
     for query_data in queries:
         promql_query = query_data['promql_query']
         query_name = query_data.get('query_name', 'Unnamed Query') 
         
+        is_failing = False
+        
         try:
-            # Send the PromQL query to the Prometheus server
             response = requests.get(
                 prom_query_url, 
                 params={'query': promql_query}, 
                 timeout=10 
             )
             
-            # Check for HTTP status codes (4xx or 5xx) - REQUIRED: all return codes must be 2XX
-            # If the Prometheus server itself returns an error (4xx/5xx), it's a critical failure.
             if not (200 <= response.status_code < 300):
-                return f'Error ({query_name} HTTP {response.status_code})'
-
-            data = response.json()
-            
-            # Check Prometheus internal status and result
-            if data['status'] == 'success' and data['data']['result']:
-                # PromQL result is an array of vectors. Check the value of the first one.
-                # A value of '1' usually means the probe was successful/online.
-                metric_value = float(data['data']['result'][0]['value'][1])
-                
-                if metric_value < 1.0:
-                    # FAILURE: Metric value indicates problem (e.g., up metric is 0)
-                    return f'Offline ({query_name} Metric < 1)'
+                is_failing = True
+                overall_status = f'Error ({query_name} HTTP {response.status_code})'
             else:
-                # FAILURE: Query succeeded but returned no data (target down/missing)
-                return f'Offline ({query_name} No Data)'
+                data = response.json()
+                
+                if data['status'] == 'success' and data['data']['result']:
+                    metric_value = float(data['data']['result'][0]['value'][1])
+                    
+                    if metric_value < 1.0:
+                        is_failing = True
+                        overall_status = f'Offline ({query_name} Metric < 1)'
+                else:
+                    is_failing = True
+                    overall_status = f'Offline ({query_name} No Data)'
 
-        except requests.exceptions.RequestException as e:
-            # FAILURE: Connection errors, timeouts, etc.
-            print(f"Error executing PromQL query {promql_query}: {e}")
-            return f'Offline ({query_name} Conn Error)'
-        except (ValueError, KeyError, IndexError) as e:
-            # FAILURE: JSON parsing error or unexpected data structure
-            print(f"Error processing PromQL response for {promql_query}: {e}")
-            return f'Error ({query_name} Data Parse)'
+        except requests.exceptions.RequestException:
+            is_failing = True
+            overall_status = f'Offline ({query_name} Conn Error)'
+        except (ValueError, KeyError, IndexError):
+            is_failing = True
+            overall_status = f'Error ({query_name} Data Parse)'
+        
+        if is_failing:
+            failure_count += 1
+            # Note: We only set the overall_status on the FIRST failure encountered
+            if overall_status == 'Online':
+                overall_status = 'Offline'
             
-    # If the loop completes without returning 'Offline' or 'Error', ALL queries passed.
-    return 'Online'
+    # If failure_count > 0, the status should be 'Offline' (or the first error message encountered)
+    if failure_count > 0:
+        # If the check fails, return the failure status (which was set to the first specific error message)
+        # If all checks passed, overall_status is still 'Online'
+        return {'status': overall_status, 'failure_count': failure_count}
+    
+    return {'status': 'Online', 'failure_count': 0}
 
 # MODIFIED: API endpoint to check and return the status of a single platform (used by JS)
+# NOW returns failure_count as well
 @app.route('/api/platform_status/<int:platform_id>')
 @login_required
 def get_platform_status(platform_id):
     db = get_db()
     cursor = db.cursor(MySQLdb.cursors.DictCursor)
     
-    # 1. Get the platform name and base Prometheus URL
-    # NOTE: health_check_endpoint is no longer in this table, but fetching base URL is necessary
     cursor.execute('SELECT name, prometheus_url FROM platforms WHERE id = %s', (platform_id,))
     platform = cursor.fetchone()
 
     if not platform:
-        return jsonify({'status': 'Not Found'}), 404
+        return jsonify({'status': 'Not Found', 'failure_count': 0}), 404
 
-    # 2. Get the list of associated queries from the new table
     cursor.execute(
         'SELECT query_name, promql_query FROM platform_prom_queries WHERE platform_name = %s', 
         (platform['name'],)
     )
     queries = cursor.fetchall()
     
-    # 3. Execute the status check with the list of queries
-    status = check_platform_status(platform.get('prometheus_url'), queries)
+    # 3. Execute the status check with the list of queries, returns dict
+    status_result = check_platform_status(platform.get('prometheus_url'), queries)
     
-    return jsonify({'status': status})
+    return jsonify(status_result) # Returns {'status': '...', 'failure_count': N}
 
 # NEW: Route to get detailed Prometheus query status (returning HTML fragment for iframe)
 @app.route('/api/platform_prom_status_html/<int:platform_id>')
@@ -221,8 +222,6 @@ def get_platform_prom_status_html(platform_id):
     prom_query_url = f"{prometheus_url.rstrip('/')}/api/v1/query" if prometheus_url else None
     
     # --- Start HTML Generation for Iframe Content ---
-    # This minimal HTML structure includes Tailwind-like styling in a single <style> block 
-    # for a clean, self-contained view inside the iframe.
     html_content = f"""
         <!DOCTYPE html>
         <html lang="en">
