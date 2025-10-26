@@ -33,6 +33,21 @@
         }
         /* Style to ensure iframe modal works over everything */
         .prom-modal { z-index: 100; }
+
+        /* Custom spinner animation */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6; /* Tailwind blue-500 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 flex flex-col md:flex-row min-h-screen">
@@ -202,8 +217,15 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
+            <!-- Loading Indicator Container -->
+            <div id="prom-loading-container" class="absolute inset-0 bg-white/90 flex items-center justify-center rounded-lg z-50 transition-opacity duration-300 hidden">
+                <div class="flex flex-col items-center">
+                    <div class="spinner mb-3"></div>
+                    <p class="text-gray-700 font-medium">Checking Prometheus Queries...</p>
+                </div>
+            </div>
             <!-- Iframe Content Area -->
-            <iframe id="prom-status-iframe" class="flex-grow w-full border-none rounded-b-lg p-2" src="about:blank"></iframe>
+            <iframe id="prom-status-iframe" class="flex-grow w-full border-none rounded-b-lg p-2" src="about:blank" style="visibility: hidden;"></iframe>
         </div>
     </div>
 
@@ -222,6 +244,8 @@
         const promModalTitle = document.getElementById('prom-modal-title');
         const promStatusIframe = document.getElementById('prom-status-iframe');
         const promModalClose = document.getElementById('prom-modal-close');
+        // NEW: Loading Container Reference
+        const promLoadingContainer = document.getElementById('prom-loading-container');
 
         // Functions to handle the mobile sidebar
         function toggleMenu() {
@@ -247,18 +271,34 @@
         // Functions to handle the Prometheus status modal
         function showPrometheusStatus(platformId, platformName) {
             promModalTitle.textContent = `Prometheus Status Detail for: ${platformName}`;
-            // Load the HTML content from the new Flask endpoint into the iframe
-            promStatusIframe.src = `/api/platform_prom_status_html/${platformId}`; 
+            
+            // 1. Show the modal
             promStatusModal.classList.remove('hidden');
             promStatusModal.classList.add('flex');
+            
+            // 2. Reset iframe and show loading spinner
+            promStatusIframe.src = 'about:blank'; // Reset content
+            promStatusIframe.style.visibility = 'hidden'; // Hide iframe content until loaded
+            promLoadingContainer.classList.remove('hidden');
+
+            // 3. Set the iframe source, triggering the API call
+            promStatusIframe.src = `/api/platform_prom_status_html/${platformId}`; 
         }
 
         function hidePromStatusModal() {
             promStatusModal.classList.remove('flex');
             promStatusModal.classList.add('hidden');
-            // Reset iframe source to prevent residual content/processing
             promStatusIframe.src = 'about:blank';
+            promStatusIframe.style.visibility = 'hidden';
+            promLoadingContainer.classList.add('hidden');
         }
+
+        // 4. Listen for the iframe content to load
+        promStatusIframe.onload = function() {
+            promLoadingContainer.classList.add('hidden');
+            promStatusIframe.style.visibility = 'visible';
+        };
+
 
         // Event listeners for existing functionality
         menuToggle.addEventListener('click', toggleMenu);
