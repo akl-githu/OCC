@@ -21,9 +21,25 @@ app.secret_key = os.getenv('SECRET_KEY', 'your_super_secret_key')
 UPLOAD_FOLDER = 'uploaded_documents'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Create the upload folder if it doesn't exist
+# Define the folder for static platform icons
+ICON_FOLDER = 'static/icons'
+
+# Create necessary folders if they don't exist
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+if not os.path.exists(ICON_FOLDER):
+    os.makedirs(ICON_FOLDER)
+
+
+# Helper function to get the list of available icons
+def get_available_icons():
+    """Returns a list of image filenames available in the static/icons directory."""
+    try:
+        # Get all files in the ICON_FOLDER
+        return [f for f in os.listdir(ICON_FOLDER) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.svg'))]
+    except FileNotFoundError:
+        print(f"Warning: Icon folder not found at {ICON_FOLDER}")
+        return []
 
 # Database connection function
 def get_db():
@@ -428,8 +444,12 @@ def platform_tracker():
     
     # Get the user's role from the session
     user_role = session.get('role')
+
+    # NEW: Get the list of available icons to pass to the template
+    available_icons = get_available_icons()
     
-    return render_template('platform_tracker.html', platforms=platforms, user_role=user_role)
+    # Pass both platforms and icons to the template
+    return render_template('platform_tracker.html', platforms=platforms, user_role=user_role, available_icons=available_icons)
 
 # Route for the documents page
 @app.route('/documents')
@@ -447,7 +467,7 @@ def documents():
     
     return render_template('documents.html', documents=documents, platforms=platforms)
 
-# MODIFIED: API endpoint to add a new platform, handling multiple Prometheus queries
+# MODIFIED: API endpoint to add a new platform, handling icon selection
 @app.route('/api/add_platform', methods=['POST'])
 @login_required
 @admin_required 
@@ -459,20 +479,27 @@ def add_platform():
     platform_name = data.get('platform_name')
     grafana_url = data.get('grafana_url', '')
     prometheus_url = data.get('prometheus_url', '')
-    # NEW FIELD: Extract the list of PromQL queries (array of strings)
     prometheus_queries = data.get('prometheus_queries', []) 
+    # NEW: Get the selected icon filename
+    icon_filename = data.get('icon_filename', '')
 
     if not platform_name:
         return jsonify({'status': 'error', 'message': 'Platform name is required'}), 400
     
     status = 'Unknown' 
     manage_url = "https://techpam.etisalat.corp.ae/SecretServer/Login.aspxReturnUrl=%2fSecretServer%2fdefault.aspx"
-    image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=' + platform_name
     manage_type = ''
+    
+    # NEW: Construct the static image URL using the selected filename
+    if icon_filename:
+        # Flask's url_for is not available here, so we construct the relative path
+        image_url = f'/static/icons/{icon_filename}'
+    else:
+        # Fallback to a generic placeholder if no icon is selected/provided
+        image_url = 'https://placehold.co/100x100/A0E7E5/000000?text=Logo'
     
     try:
         # 1. Insert into platforms table
-        # NOTE: health_check_endpoint removed from INSERT
         cursor.execute(
             'INSERT INTO platforms (name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url) VALUES (%s, %s, %s, %s, %s, %s, %s)',
             (platform_name, status, image_url, grafana_url, manage_type, manage_url, prometheus_url)
@@ -495,7 +522,7 @@ def add_platform():
         )
         
         db.commit()
-        log_event_action(session.get('username'), f'Added new platform: {platform_name} with {len(prometheus_queries)} health queries')
+        log_event_action(session.get('username'), f'Added new platform: {platform_name} with icon {icon_filename}')
         return jsonify({'status': 'success', 'message': 'Platform added successfully'})
     except MySQLdb.Error as e:
         db.rollback()
@@ -517,7 +544,6 @@ def update_platform():
     new_platform_name = data.get('new_platform_name')
     grafana_url = data.get('grafana_url', '')
     prometheus_url = data.get('prometheus_url', '')
-    # NOTE: health_check_endpoint is no longer expected/used
 
     if not old_platform_name or not new_platform_name:
         return jsonify({'status': 'error', 'message': 'Old and New Platform names are required for update'}), 400
@@ -541,11 +567,10 @@ def update_platform():
             # 3. Update documents records
             cursor.execute('UPDATE documents SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
 
-            # NEW: 4. Update Prom Queries records
+            # 4. Update Prom Queries records
             cursor.execute('UPDATE platform_prom_queries SET platform_name = %s WHERE platform_name = %s', (new_platform_name, old_platform_name))
 
         # 5. Update the platform itself (name, URLs)
-        # NOTE: health_check_endpoint removed from UPDATE
         cursor.execute(
             'UPDATE platforms SET name = %s, grafana_url = %s, prometheus_url = %s WHERE name = %s',
             (new_platform_name, grafana_url, prometheus_url, old_platform_name)
@@ -585,7 +610,7 @@ def delete_platform():
         # 3. Delete all related progress entries
         cursor.execute('DELETE FROM platform_progress WHERE platform_name = %s', (platform_name,))
         
-        # NEW: 4. Delete all related Prom queries entries
+        # 4. Delete all related Prom queries entries
         cursor.execute('DELETE FROM platform_prom_queries WHERE platform_name = %s', (platform_name,))
         
         # 5. Delete the platform itself

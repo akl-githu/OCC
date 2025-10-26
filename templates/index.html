@@ -145,7 +145,8 @@
             <div class="platform-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col items-center p-6 text-center transform hover:scale-105 transition duration-300 ease-in-out" 
                  data-platform-id="{{ platform.id }}"
                  data-platform-name="{{ platform.name }}">
-                <img src="{{ platform.image_url }}" alt="{{ platform.name }} Logo" class="w-24 h-24 rounded-full mb-4">
+                <!-- The 'rounded-full' class was removed here -->
+                <img src="{{ platform.image_url }}" alt="{{ platform.name }} Logo" class="w-12 h-12 mb-4 object-contain">
                 <h3 class="text-xl font-semibold mb-1">{{ platform.name }}</h3>
                 
                 <!-- Status element: Start with 'Loading...' -->
@@ -154,7 +155,7 @@
                 </span>
                 
                 <div class="mt-6 flex space-x-2 w-full">
-                    <!-- NEW: Prometheus Status Icon -->
+                    <!-- Prometheus Status Icon -->
                     <button onclick="showPrometheusStatus('{{ platform.id }}', '{{ platform.name }}')" 
                             class="flex-shrink-0 bg-yellow-500 text-white p-2 rounded-lg hover:bg-yellow-600 transition-colors duration-200" 
                             title="View Prometheus Query Status Codes">
@@ -216,7 +217,7 @@
         const modalMessage = document.getElementById('modal-message');
         const modalClose = document.getElementById('modal-close');
         
-        // NEW: Prometheus Status Modal elements
+        // Prometheus Status Modal elements
         const promStatusModal = document.getElementById('prom-status-modal');
         const promModalTitle = document.getElementById('prom-modal-title');
         const promStatusIframe = document.getElementById('prom-status-iframe');
@@ -243,7 +244,7 @@
             messageModal.classList.add('hidden');
         }
         
-        // NEW: Functions to handle the Prometheus status modal
+        // Functions to handle the Prometheus status modal
         function showPrometheusStatus(platformId, platformName) {
             promModalTitle.textContent = `Prometheus Status Detail for: ${platformName}`;
             // Load the HTML content from the new Flask endpoint into the iframe
@@ -282,7 +283,7 @@
             }
         }
         
-        // --- NEW ASYNCHRONOUS STATUS CHECK LOGIC ---
+        // --- ASYNCHRONOUS STATUS CHECK LOGIC (Unchanged) ---
 
         // Helper function to update the badge's appearance
         function updateStatusBadge(badgeElement, status) {
@@ -338,7 +339,7 @@
         // Start the process when the page is fully loaded
         document.addEventListener('DOMContentLoaded', initializeStatusChecks);
         
-        // --- END NEW ASYNCHRONOUS STATUS CHECK LOGIC ---
+        // --- END ASYNCHRONOUS STATUS CHECK LOGIC ---
     </script>
 </body>
 </html>

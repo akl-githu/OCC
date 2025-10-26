@@ -22,9 +22,18 @@ CREATE TABLE IF NOT EXISTS platforms (
     grafana_url VARCHAR(255),
     manage_type VARCHAR(50),
     manage_url VARCHAR(255),
-        -- NEW COLUMNS FOR PROMETHEUS INTEGRATION
     prometheus_url VARCHAR(255),
-    health_check_endpoint VARCHAR(255)
+);
+
+-- Table for storing platforms Prom quries
+CREATE TABLE platform_prom_queries (
+    id INT NOT NULL AUTO_INCREMENT,
+    platform_name VARCHAR(255) NOT NULL,
+    query_name VARCHAR(255) NOT NULL,
+    promql_query TEXT NOT NULL,
+    is_promql TINYINT(1) DEFAULT 1,
+    PRIMARY KEY (id),
+    KEY idx_platform_name (platform_name)
 );
 
 -- Table for events and actions logs
